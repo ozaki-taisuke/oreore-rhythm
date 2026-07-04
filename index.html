@@ -1,0 +1,863 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>オレオレリズム 🥁</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;overflow:hidden;background:#151222;color:#EDE7F8;
+    font-family:"Hiragino Maru Gothic ProN","BIZ UDPGothic","Noto Sans JP",sans-serif;
+    -webkit-user-select:none;user-select:none}
+  /* canvasのCSSサイズ固定は必須（属性サイズ=表示サイズの罠。DPR>=2で崩壊する） */
+  #c{position:fixed;inset:0;width:100%;height:100%;touch-action:none}
+  #ui{position:fixed;left:0;right:0;top:0;display:flex;gap:8px;padding:10px;
+    align-items:center;pointer-events:none;z-index:30}
+  #ui .ttl{font-weight:800;font-size:15px;letter-spacing:.04em}
+  #ui .ttl span{color:#FFB84D}
+  #ui button{pointer-events:auto;background:#241d3a;color:#EDE7F8;border:2px solid #3d3260;
+    border-radius:99px;padding:8px 14px;font-size:13.5px;font-weight:700;cursor:pointer}
+  #setbtn{margin-left:auto}
+  #hud{position:fixed;left:0;right:0;top:54px;text-align:center;pointer-events:none;
+    z-index:4;line-height:1.6}
+  #phase{font-size:22px;font-weight:800;letter-spacing:.08em;min-height:34px}
+  #phase.call{color:#7FD7EA} #phase.resp{color:#FFB84D}
+  #judge{font-size:16px;font-weight:800;min-height:26px}
+  #judge .just{color:#FFD34D} #judge .ok{color:#8BE29B} #judge .miss{color:#FF7A6B}
+  #judge .spam{color:#B9A8E8}
+  #combo{font-size:13px;color:#9d90c4}
+  #panel,#screen{position:fixed;left:0;right:0;bottom:0;background:rgba(21,18,34,.97);
+    border-top:2px solid #3d3260;padding:14px 18px calc(18px + env(safe-area-inset-bottom));
+    z-index:10}
+  #panel{z-index:40} /* 設定はタイトル画面の上からも開ける */
+  #panel{display:none;max-height:52vh;overflow-y:auto}
+  #panel.open{display:block}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:13.5px}
+  .row label{width:120px;color:#b9ace0}
+  .row input[type=range]{flex:1;accent-color:#FFB84D;height:30px}
+  .row .val{width:64px;text-align:right;color:#FFD34D;font-variant-numeric:tabular-nums}
+  .im{background:#241d3a;color:#EDE7F8;border:2px solid #3d3260;border-radius:10px;
+    padding:8px 4px;font-size:13px;font-weight:800;cursor:pointer;flex:1}
+  .im.on{background:#FFB84D;border-color:#FFB84D;color:#241d3a}
+  #screen{top:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:14px;text-align:center;background:rgba(21,18,34,.92);backdrop-filter:blur(4px)}
+  #screen.hide{display:none}
+  #screen h1{font-size:clamp(26px,7vw,40px);font-weight:800;letter-spacing:.06em}
+  #screen h1 span{color:#FFB84D}
+  #screen .sub{color:#9d90c4;font-size:13.5px;line-height:1.8;max-width:520px;padding:0 16px}
+  .bpms{display:flex;gap:10px;width:100%;max-width:520px;padding:0 16px}
+  .bpms button,#screen .go{background:#241d3a;color:#EDE7F8;border:2px solid #3d3260;
+    border-radius:14px;padding:12px 18px;font-size:15px;font-weight:800;cursor:pointer}
+  .bpms button{flex:1;padding:10px 2px;line-height:1.5}
+  .bpms button small{display:block;font-size:17px;font-variant-numeric:tabular-nums}
+  .bpms button.on{background:#FFB84D;border-color:#FFB84D;color:#241d3a}
+  #screen .go{background:#FF6F61;border-color:#FF6F61;padding:14px 42px;font-size:18px}
+  .opts{display:flex;gap:18px;flex-wrap:wrap;justify-content:center;color:#b9ace0;font-size:13.5px}
+  .opts label{display:flex;align-items:center;gap:8px;cursor:pointer}
+  /* チェックボックス＝ゲーム内の「的」。OFF=遠い接近リング（冷紫の輪）、
+     ON=ジャストの瞬間（リングが灯り、まんなかに拍が入る）。世界観の統一 */
+  input.tgl{appearance:none;-webkit-appearance:none;flex:none;width:24px;height:24px;
+    border-radius:50%;border:3px solid #4a3f73;background:transparent;cursor:pointer;
+    position:relative;transition:border-color .15s,box-shadow .15s;margin:0}
+  input.tgl:checked{border-color:#FFB84D;box-shadow:0 0 10px rgba(255,184,77,.4)}
+  input.tgl:checked::after{content:'';position:absolute;inset:3px;border-radius:50%;
+    background:#FFD34D;animation:tglpop .18s ease-out}
+  @keyframes tglpop{from{transform:scale(.3)}to{transform:scale(1)}}
+  .ver{color:#5f5388;font-size:11px;letter-spacing:.04em}
+  #result{font-size:15px;line-height:2}
+  #result b{font-size:26px;color:#FFD34D}
+  #result .cnt{color:#9d90c4;font-size:13.5px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <div class="ttl">オレオレ<span>リズム</span> 🥁</div>
+  <button id="stopbtn" style="display:none">やめる</button>
+  <button id="setbtn">⚙️</button>
+</div>
+<div id="hud">
+  <div id="phase"></div>
+  <div id="judge"></div>
+  <div id="combo"></div>
+</div>
+<div id="panel">
+  <div class="row"><label>にゅうりょく</label>
+    <div class="modes" style="display:flex;gap:6px;flex:1">
+      <button data-im="target" class="im on">まと</button>
+      <button data-im="pad" class="im">パッド</button>
+      <button data-im="full" class="im">ぜんぶ</button>
+    </div></div>
+  <div class="row"><label>パッドのばしょ</label>
+    <div style="display:flex;gap:6px;flex:1">
+      <button data-ps="bottom" class="ps im on">した</button>
+      <button data-ps="right" class="ps im">みぎ</button>
+      <button data-ps="left" class="ps im">ひだり</button>
+    </div></div>
+  <div class="row"><label>わなヒント</label>
+    <label style="flex:1;color:#b9ace0;display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" class="tgl" id="traphint"> わな（ダ・がまん）を あかい てんせんで 表示</label></div>
+  <div class="row"><label>おと補正</label><input id="latency" type="range" min="-200" max="250" step="5" value="0"><span class="val" id="latencyV">0ms</span></div>
+  <div class="row"><label>ジャスト窓</label><input id="winsl" type="range" min="50" max="180" step="5" value="100"><span class="val" id="winV">±100ms</span></div>
+  <div class="sub" style="font-size:11.5px;color:#7d6fa8;line-height:1.7">
+    おと補正: イヤホンやBluetoothで「合ってるのにおそい判定」が出るとき、＋方向へ。<br>
+    （音の出口が遅れるぶんを判定から引く。拍の時計そのものは触らない）
+  </div>
+</div>
+<div id="screen">
+  <h1>オレオレ<span>リズム</span> 🥁</h1>
+  <div class="sub">きいて → まねして、の コール&レスポンス。<br>
+    <b>まと（まんなかの子）をタップ</b>＝しょうぶ。おなじリズムで こたえよう。<br>
+    <b>まとの外</b>＝ジャム席。すきに たたいてOK（場所で 音が 変わるよ）。<br>
+    まとへの れんだだけは……👀おみとおし。</div>
+  <div class="bpms">
+    <button data-bpm="110">やさしい<small>110</small></button>
+    <button data-bpm="130" class="on">ふつう<small>130</small></button>
+    <button data-bpm="150">はやい<small>150</small></button>
+    <button data-bpm="170">おに<small>170</small></button>
+  </div>
+  <div class="opts">
+    <label><input type="checkbox" class="tgl" id="skiptut"> れんしゅうを とばす</label>
+    <label><input type="checkbox" class="tgl" id="accel"> かそく（ほんばんで だんだん はやく）</label>
+  </div>
+  <div id="result"></div>
+  <button class="go" id="go">はじめる！</button>
+  <div class="ver">オレオレリズム v0.1.0（フェーズ1・うちこみビート）</div>
+</div>
+
+<script>
+'use strict';
+/* ============================================================
+   オレオレリズム フェーズ1 — コール&レスポンス
+   核: 判定の時計は AudioContext（音声ハードウェアの時計）。
+       拍・伴奏・判定がすべて同じ時計を見る。rAFは描画専用。
+   持ち込み原則: 音楽的時間は不可侵 / 入力は自由・評価は正直 /
+       きをつけ（拍格子規律） / 材質はキャラ・衝撃はUI
+============================================================ */
+const P={
+  inputMode:'target',   // 'target'=まと / 'pad'=帯(親指ゾーン) / 'full'=全画面(DSゴールド方式)
+  padSide:'bottom',     // 'bottom'/'right'/'left' 縦横持ち×利き手対応（DSは本体を持ち替えたがソフトなら選べる）
+  bpm:130, window:100,  // ジャスト窓 ±ms（OK帯はその2.2倍）
+  skipTut:false, accel:false,
+  trapHint:false,       // ON=わなを赤破線で表示（補助輪）。既定は的を平等に出す（耳と記憶のテスト）
+  latency:0,            // 出力遅延補正 ms（判定側で引く。時計は不可侵）
+  soft:0.62, goo:0.12, hari:0.55,
+  hitstop:70, shake:10, squash:0.32, zoom:0.05, particles:30,
+};
+const OKX=2.2;
+const qs=new URLSearchParams(location.search);
+if(qs.get('bpm'))P.bpm=+qs.get('bpm');
+if(qs.get('skip'))P.skipTut=true;
+if(qs.get('accel'))P.accel=true;
+if(qs.get('traphint'))P.trapHint=true;
+const TUT_PAIRS=qs.get('pairs')?+qs.get('pairs'):2;   // れんしゅう: セットあたりのペア数
+// ほんばんのペア数はbuildChart時に決める（とばす時は長め。熱狂してきた頃に終わらせない）
+const honPairs=()=>qs.get('honban')?+qs.get('honban'):(P.skipTut?16:12);
+
+/* ---------- 譜面: 小節内の拍位置（1拍目=1）。コール小節→レスポンス小節の対 ---------- */
+const POOL=[
+  {name:'よんはくめ',   pat:[4]},
+  {name:'バックビート', pat:[2,4]},
+  {name:'タタン',       pat:[3,4,4.5]},
+  {name:'うらはく',     pat:[2.5,4.5]},
+  {name:'よつうち',   pat:[1,2,3,4]}, // けずり型ダの素材（1だけ残る・1と4だけ残る等）
+  {name:'ダのわな',     pat:[2,4], decoys:[3]}, // タン・ダ・タン → タン・＿・タン（ダはまねしない）
+];
+const GAMAN={name:'がまん', pat:[], gaman:true}; // 叩いたら負け。単独セットにはしない
+// （ひっかけは普通の間に潜んでこそ。予告は専用の合図音「しーっ」で行う）
+let rngState=(+qs.get('seed')||((Math.random()*1e9)|0))>>>0;
+function rng(){rngState=(rngState*1664525+1013904223)>>>0;return rngState/4294967296;}
+
+/* ---------- canvas（素振り実験機で確立した作法） ---------- */
+const cv=document.getElementById('c'), ctx=cv.getContext('2d');
+let W=0,H=0,DPR=1;
+function resize(){
+  W=cv.clientWidth||window.innerWidth; H=cv.clientHeight||window.innerHeight;
+  DPR=Math.min(2,window.devicePixelRatio||1);
+  cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+window.addEventListener('resize',resize); resize();
+function checkResize(){ if(Math.abs(cv.clientWidth-W)>1||Math.abs(cv.clientHeight-H)>1) resize(); }
+const CY=()=>H*0.46, blobR=()=>Math.min(110,Math.min(W,H)*0.17);
+const lerp=(a,b,t)=>a+(b-a)*t;
+
+/* ---------- audio: 合成音＋先読みスケジューラ ---------- */
+let AC=null;
+function ac(){ if(!AC){AC=new (window.AudioContext||window.webkitAudioContext)();}
+  if(AC.state==='suspended')AC.resume(); return AC; }
+function tone(t,f,dur,peak,type='sine',glide=0){
+  const a=ac(),o=a.createOscillator(),g=a.createGain();
+  o.type=type; o.frequency.setValueAtTime(f,t);
+  if(glide)o.frequency.exponentialRampToValueAtTime(Math.max(25,f+glide),t+dur);
+  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(peak,t+.004);
+  g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+  o.connect(g).connect(a.destination); o.start(t); o.stop(t+dur+.05);
+}
+const kick =t=>tone(t,140,.12,.42,'sine',-95);
+const hat  =t=>tone(t,6200,.03,.05,'square');
+const bass =(t,f)=>tone(t,f,.22,.16,'triangle');
+const cueA =t=>tone(t,780,.09,.26,'square');   // コールの「手本」音（タン）
+const cueDa=t=>tone(t,320,.10,.30,'square',-60); // まねしちゃダメな音（ダ）
+const countTone=(t,one)=>tone(t,one?1046:698,.05,.12,'sine'); // ただのカウント（手本の声と別）
+function relief(t){ tone(t,392,.16,.10,'sine'); tone(t+0.12,523,.22,.10,'sine'); } // ほっ…（静かなごほうび）
+const dingJ=t=>{tone(t,523,.16,.2);tone(t,784,.16,.14);tone(t,1046,.2,.1);} // ジャスト
+const dingO=t=>tone(t,440,.09,.14);
+const thud =t=>tone(t,120,.16,.25,'sine',-70);
+const BASSLINE=[110,110,82.4,98]; // A A E G（小節ごと）
+function shush(t){ // がまんの予告音（やわらかい「フゥー↓」。破裂音NG・驚かせない）
+  const a=ac(),len=0.38;
+  const o=a.createOscillator(),g=a.createGain();
+  o.type='sine';
+  o.frequency.setValueAtTime(740,t);
+  o.frequency.exponentialRampToValueAtTime(540,t+len);
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.linearRampToValueAtTime(0.18,t+0.06); // ゆるやかな立ち上がり
+  g.gain.exponentialRampToValueAtTime(0.0001,t+len);
+  o.connect(g).connect(a.destination);o.start(t);o.stop(t+len+0.05);
+}
+
+/* ---------- 状態 ---------- */
+const S={
+  scene:'title',        // title | play | result
+  t0:0,                 // 曲開始のaudio時刻
+  mStart:[], mSpb:[],   // テンポマップ: 小節ごとの開始時刻と秒毎拍（可変速の土台）
+  chart:[],             // 小節ごと {kind:'countin'|'call'|'resp', set, pat, hits:[{beat,time,state}]}
+  schedM:0, schedE:0,   // スケジューラ位置（小節・小節内8分）
+  measures:0,
+  counts:{just:0,ok:0,miss:0,spam:0,trap:0,taps:0},
+  combo:0,best:0,
+  tapsThisMeasure:0, extraTaps:0, spamMeasure:false, curMeasure:-1,
+  fb:null, fbUntil:0,   // 直近判定表示
+  // キャラ物理（素振り実験機から移植・簡約）
+  bx:0,by:0,sx:1,sy:1,vsx:0,vsy:0,
+  pts:Array.from({length:14},()=>({o:0,v:0})),
+  settle:0, energy:.3, blink:0, nextBlink:1600, star:0, jito:0, relief:0, tGlow:0,
+  shush:0,              // 「しーっ」の顔（0..1）。絵文字ではなく本人が演じる
+  hitstop:0, shake:0, zoomPulse:0, parts:[],
+  outro:0, outroFx:0,   // 曲おわりの余韻（拍手と褒めを済ませてからリザルトへ）
+  outroTier:0, outroDur:3.0, // 褒めの段階（正解率で祝いの規模が変わる。参加もねぎらう）
+};
+const NPT=14;
+window.__R={P,S,judgeAt:null}; // テスト用フック
+
+/* ---------- 譜面生成 ---------- */
+function buildChart(){
+  S.chart=[{kind:'countin',pat:[1,2,3,4],hits:[]}];
+  const pair=(set,section,honPair)=>{
+    S.chart.push({kind:'call',set,pat:set.pat,hits:[],section,honPair});
+    S.chart.push({kind:'resp',set,pat:set.pat,hits:[],section,honPair});
+  };
+  if(!P.skipTut){
+    for(const set of POOL) for(let p=0;p<TUT_PAIRS;p++) pair(set,'tut');
+    pair(GAMAN,'tut'); // がまんの顔見せ（予告つき）は1回だけ
+    // 区切り: 「それじゃあ ほんばん いくよ！」＋数え直し
+    S.chart.push({kind:'break',hits:[]});
+    S.chart.push({kind:'countin',pat:[1,2,3,4],hits:[]});
+  }
+  let lastGaman=false;
+  for(let p=0;p<honPairs();p++){ // ほんばん: 何が来るかは耳で聞く
+    // がまんは約25%・連続は禁止（しーっの連発は緊張が緩む）
+    if(!lastGaman&&rng()<0.25){ pair(GAMAN,'hon',p); lastGaman=true; continue; }
+    lastGaman=false;
+    let set=POOL[Math.floor(rng()*POOL.length)];
+    const roll=rng();
+    if(roll<0.30){
+      // 追加型ダ: 空きスロットに1個。距離制限は0.75拍（1.0拍だと既存パターンの
+      // 補集合＝1・3や2・4ばかりになり単調。近接の公平性は「最寄りの的が勝つ」判定で担保）
+      const slots=[];
+      for(let b=1;b<=4.5;b+=0.5){
+        const nearHit=set.pat.some(h=>Math.abs(h-b)<0.75);
+        const nearDa=(set.decoys||[]).some(d=>Math.abs(d-b)<0.5);
+        if(!nearHit&&!nearDa)slots.push(b);
+      }
+      if(slots.length){
+        set={name:set.name,pat:set.pat,
+          decoys:[...(set.decoys||[]),slots[Math.floor(rng()*slots.length)]]};
+      }
+    }else if(roll<0.55&&set.pat.length>=1&&!(set.decoys&&set.decoys.length)){
+      // けずり型ダ: 覚えたパターンのタンが一部〜全部ダに変わる（全部なら実質全休符）。
+      // リズムの「中」にダが食い込むので、譜面が簡単になった感を出さない
+      const idx=set.pat.map((_,i)=>i);
+      for(let i=idx.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[idx[i],idx[j]]=[idx[j],idx[i]];}
+      const keep=Math.floor(rng()*set.pat.length); // 残す数0〜len-1（必ず1個は削る）
+      const keepSet=new Set(idx.slice(0,keep));
+      const pat=[],dec=[];
+      set.pat.forEach((b,i)=>{(keepSet.has(i)?pat:dec).push(b);});
+      pat.sort((a,b)=>a-b); dec.sort((a,b)=>a-b);
+      set={name:set.name+'→けずり',pat,decoys:dec};
+    }
+    pair(set,'hon',p);
+  }
+  S.measures=S.chart.length;
+  // テンポマップ: 小節ごとにBPMを割当（かそく: ほんばんでペアごとに+6、最大+48）
+  S.mStart=[];S.mSpb=[];
+  let t=S.t0;
+  S.chart.forEach(m=>{
+    let bpm=P.bpm;
+    if(P.accel&&m.section==='hon')bpm=P.bpm+Math.min(48,(m.honPair||0)*6);
+    const spb=60/bpm;
+    S.mStart.push(t);S.mSpb.push(spb);
+    t+=4*spb;
+  });
+  // レスポンス小節の期待ヒット/ダにaudio絶対時刻を張る
+  S.chart.forEach((m,mi)=>{
+    if(m.kind!=='resp')return;
+    m.hits=m.pat.map(b=>({beat:b,time:S.mStart[mi]+(b-1)*S.mSpb[mi],state:'wait'}));
+    m.decoys=(m.set&&m.set.decoys||[]).map(b=>({beat:b,time:S.mStart[mi]+(b-1)*S.mSpb[mi]}));
+  });
+}
+
+/* ---------- スケジューラ（先読み120ms・8分解像度） ---------- */
+function fanfare(t){ tone(t,523,.14,.22); tone(t+0.13,659,.14,.22); tone(t+0.26,784,.22,.26); }
+function endFanfare(t){ // 曲おわりの余韻: 上昇＋和音で締める（breakのより一段はれやか）
+  tone(t,523,.12,.22); tone(t+0.12,659,.12,.22); tone(t+0.24,784,.12,.24);
+  tone(t+0.38,1046,.5,.24); tone(t+0.38,784,.5,.14); tone(t+0.38,659,.5,.11);
+}
+function applause(t,n,peak,len){ // 拍手: 短いノイズ粒をばらまく（一人ひとりの手が違う時刻・違う高さ）
+  n=n||26; peak=peak||0.085; len=len||1.7;
+  const a=ac(), buf=a.createBuffer(1,Math.floor(a.sampleRate*0.05),a.sampleRate);
+  const d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.exp(-i/d.length*7);
+  for(let i=0;i<n;i++){
+    const st=t+Math.random()*len;
+    const s=a.createBufferSource(), g=a.createGain(), bp=a.createBiquadFilter();
+    bp.type='bandpass'; bp.frequency.value=1300+Math.random()*1800; bp.Q.value=1.1;
+    g.gain.value=peak*(1-(st-t)/(len+0.4))*(0.6+Math.random()*0.4); // だんだん静かに
+    s.buffer=buf; s.connect(bp).connect(g).connect(a.destination); s.start(st);
+  }
+}
+function victoryArp(t){ // かんぺき専用: 勝ちのアルペジオ（高く駆け上がる）
+  tone(t,1046,.11,.15); tone(t+0.11,1318,.11,.15);
+  tone(t+0.22,1568,.11,.16); tone(t+0.33,2093,.34,.17);
+}
+function scheduler(){
+  if(S.scene!=='play')return;
+  const ahead=ac().currentTime+0.12;
+  while(S.schedM<S.measures){
+    const spb=S.mSpb[S.schedM];
+    const t=S.mStart[S.schedM]+S.schedE*spb/2; // 小節内8分
+    if(t>ahead)break;
+    const m=S.chart[S.schedM], bin=S.schedE/2;
+    if(m.kind==='break'){
+      if(S.schedE===0)fanfare(t); // 伴奏を止めて一呼吸（区切りの意味は静けさで作る）
+    }else{
+      if(S.schedE%2===0){ kick(t); if(bin===0&&m.kind!=='countin')bass(t,BASSLINE[S.schedM%4]); }
+      else hat(t);
+      if(m.kind==='call' && m.pat&&m.pat.includes(bin+1)) cueA(t);
+      if(m.kind==='countin' && S.schedE%2===0) countTone(t,bin===0);
+      if(m.kind==='call'&&m.set&&m.set.decoys&&m.set.decoys.includes(bin+1)) cueDa(t);
+      if(m.kind==='call'&&m.set&&m.set.gaman&&(bin===0||bin===2)) shush(t); // 予告: しーっ×2
+    }
+    S.schedE++; if(S.schedE>=8){S.schedE=0;S.schedM++;}
+  }
+}
+setInterval(scheduler,40);
+
+/* ---------- 進行（audio時計が唯一の真実） ---------- */
+function nowA(){ return AC?AC.currentTime:0; }
+function measureNow(){
+  const n=nowA(); let mi=S._mi||0;
+  while(mi<S.measures-1&&n>=S.mStart[mi+1])mi++;
+  while(mi>0&&n<S.mStart[mi])mi--;
+  S._mi=mi; return mi;
+}
+function beatInMeasure(mi){ return (nowA()-S.mStart[mi])/S.mSpb[mi]; } // 小節内拍(0..4)
+
+function startGame(){
+  const a=ac();
+  S.scene='play';
+  S.t0=a.currentTime+0.8;
+  S.schedM=0; S.schedE=0; S._mi=0;
+  S.counts={just:0,ok:0,miss:0,spam:0,trap:0,taps:0};
+  S.combo=0;S.best=0;S.curMeasure=-1;S.fb=null;S.outro=0;S.outroFx=0;S.shush=0;
+  document.getElementById('judge').innerHTML=''; // 前プレイの判定（+XXms等）を持ち越さない
+  buildChart();
+  document.getElementById('screen').classList.add('hide');
+  document.getElementById('stopbtn').style.display='';
+}
+function endGame(){
+  S.scene='result';
+  document.getElementById('stopbtn').style.display='none';
+  const c=S.counts, total=c.just+c.ok+c.miss+c.trap;
+  const rate=total?c.just/total:0;
+  const rank= rate>=0.85?'かんぺき！！':rate>=0.6?'すごい！':rate>=0.35?'まあまあ':'れんしゅうだ！';
+  document.getElementById('result').innerHTML=
+    '<b>'+rank+'</b><br>'+
+    '<span class="cnt">ジャスト '+c.just+'　OK '+c.ok+'　ミス '+c.miss+
+    (c.trap?'　ダ '+c.trap:'')+(c.spam?'　👀おみとおし '+c.spam:'')+'　さいだいコンボ '+S.best+'</span>';
+  document.getElementById('go').textContent='もういちど！';
+  document.getElementById('screen').classList.remove('hide');
+}
+
+/* ---------- 判定（すべてaudio時刻で） ---------- */
+function judgeAt(tapT){ // tapT: audio時刻（補正済みで渡す）
+  if(S.scene!=='play')return null;
+  S.counts.taps++;
+  const win=P.window/1000, okz=win*OKX;
+  // 近傍の未ヒット期待を探す（現在±1小節）
+  let bestHit=null,bestOff=1e9;
+  const mi=measureNow();
+  for(let k=Math.max(0,mi-1);k<=Math.min(S.measures-1,mi+1);k++){
+    for(const h of S.chart[k].hits){
+      if(h.state!=='wait')continue;
+      const off=tapT-h.time;
+      if(Math.abs(off)<Math.abs(bestOff)){bestOff=off;bestHit=h;}
+    }
+  }
+  // 最寄りの「的」が勝つ: タンよりダのほうが近いタップはわな
+  // （ダを0.75拍まで近接できるようにした代償の公平性。高速小節でもごまかせない）
+  let bestDa=1e9,bestDaM=-1;
+  for(let k=Math.max(0,mi-1);k<=Math.min(S.measures-1,mi+1);k++){
+    for(const d of (S.chart[k].decoys||[])){
+      const off=tapT-d.time;
+      if(Math.abs(off)<Math.abs(bestDa)){bestDa=off;bestDaM=k;}
+    }
+  }
+  if(Math.abs(bestDa)<=okz&&(!bestHit||Math.abs(bestDa)<Math.abs(bestOff))){
+    if(bestDaM>=0)S.chart[bestDaM].trapped=true; // ぜんぶダ小節のごほうび判定用
+    S.counts.trap++; S.combo=0; S.jito=900; S.settle=340;
+    feedback('miss','<span class="miss">ダ！ それは まねしない…！</span>');
+    thud(nowA()); S.vsy+=3;
+    return 'trap';
+  }
+  if(bestHit&&Math.abs(bestOff)<=okz){
+    const ms=Math.round(bestOff*1000);
+    if(Math.abs(bestOff)<=win){
+      bestHit.state='just'; S.counts.just++; S.combo++; S.best=Math.max(S.best,S.combo);
+      feedback('just','<span class="just">ジャスト!</span> '+(ms>=0?'+':'')+ms+'ms');
+      impact(1.4); S.star=500; dingJ(nowA()); burst(0,0,P.particles); bloom(0.09);
+    }else{
+      bestHit.state='ok'; S.counts.ok++; S.combo++;
+      feedback('ok','<span class="ok">OK</span> '+(ms>=0?'+':'')+ms+'ms');
+      impact(0.5); dingO(nowA()); poke(0.07);
+    }
+    S.settle=300;
+    return bestHit.state;
+  }
+  // がまん小節を叩いた → その場で宣告（小節末まで黙らない）
+  {
+    const mObj=S.chart[mi];
+    if(mObj&&mObj.kind==='resp'&&mObj.set&&mObj.set.gaman&&
+       tapT>=S.mStart[mi]-0.05&&tapT<S.mStart[mi]+4*S.mSpb[mi]){
+      if(!mObj.failed){
+        mObj.failed=true; S.counts.miss++; S.combo=0; S.jito=900; S.settle=340;
+        feedback('miss','<span class="miss">あっ、たたいちゃった…！🤫</span>');
+        thud(nowA()); tone(nowA(),330,.18,.14,'sine',-160);
+      }else{ poke(0.04); }
+      return 'gamanfail';
+    }
+  }
+  // 期待から遠いタップ = 自由タップ（ミスにはしない。ただし数えている）
+  S.extraTaps++; poke(0.05); tone(nowA(),260,.05,.06);
+  S.settle=Math.max(S.settle,240);
+  return 'free';
+}
+window.__R.judgeAt=(t)=>judgeAt(t);
+
+function inBlob(x,y){const r=blobR()*1.7;return x*x+y*y<r*r;}
+function inPad(rawX,rawY){
+  if(P.padSide==='right')return rawX>W*0.66;
+  if(P.padSide==='left') return rawX<W*0.34;
+  return rawY>H*0.72;
+}
+function isPlayTap(x,y,rawX,rawY){
+  if(P.inputMode==='full')return true;          // DSゴールド方式: 全画面が勝負
+  if(P.inputMode==='pad')return inPad(rawX,rawY); // 持ち方×利き手検証用
+  return inBlob(x,y);                            // 既定: まと
+}
+cv.addEventListener('pointerdown',(e)=>{
+  ac();
+  if(S.scene!=='play')return;
+  const rect=cv.getBoundingClientRect();
+  const rawY=e.clientY-rect.top;
+  const x=e.clientX-rect.left-W/2, y=rawY-CY();
+  if(isPlayTap(x,y,e.clientX-rect.left,rawY)){
+    judgeAt(nowA()-P.latency/1000); // 勝負タップ（判定と連打監視の対象）
+  }else{
+    adlib(x,y); // ジャム席（自由。太鼓のように鳴るだけ）
+  }
+});
+function adlib(x,y){
+  const f=180+260*Math.min(1,Math.max(0,(x/W+0.5)));   // 位置で音程が変わる
+  tone(nowA(),f,.08,.13,'triangle',-40);
+  hat(nowA());
+  for(let i=0;i<6;i++){const a=Math.random()*Math.PI*2,v=1.5+Math.random()*3;
+    S.parts.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v-1,r:2+Math.random()*3,
+      life:300,hue:280});}
+}
+
+/* 小節末の評価（がまん/ぜんぶダのごほうび・おみとおし）。二重呼び出しはevaledで防ぐ */
+function evalMeasureEnd(idx){
+  const pm=S.chart[idx];
+  if(!pm||pm.kind!=='resp'||pm.evaled)return;
+  pm.evaled=true;
+  if(pm.set&&pm.set.gaman){
+    if(!pm.failed){ // 成功: 静かなごほうび（★もヒットストップもなし。点はジャスト扱い）
+      S.counts.just++; S.combo++; S.best=Math.max(S.best,S.combo);
+      feedback('ok','<span class="ok">…がまん かんぺき（えらい）</span>');
+      relief(nowA()); S.relief=750;
+    } // 失敗は叩いた瞬間に宣告済み
+  }
+  else if(pm.hits.length===0&&(pm.decoys||[]).length>0&&!pm.trapped&&S.extraTaps===0){
+    // ぜんぶダ（けずりの実質全休符）: がまんと同格。やり過ごせたら静かなごほうび
+    S.counts.just++; S.combo++; S.best=Math.max(S.best,S.combo);
+    feedback('ok','<span class="ok">…ぜんぶ ダ！ みぬいた（えらい）</span>');
+    relief(nowA()); S.relief=750;
+  }
+  else if(S.extraTaps>=3){
+    S.counts.spam++; S.jito=1000;
+    feedback('spam','<span class="spam">👀 おみとおし（れんだは ノーカン）</span>');
+  }
+}
+
+function feedback(kind,html){
+  S.fb=html; S.fbUntil=nowA()+0.9;
+  if(kind==='miss'){S.combo=0;}
+  document.getElementById('judge').innerHTML=html;
+}
+
+/* ---------- フレーム処理（描画とゲーム進行の検出。時計はaudio） ---------- */
+let last=performance.now(),acc=0;const STEP=1000/120;
+function frame(nowMs){
+  checkResize();
+  let dt=Math.min(50,nowMs-last);last=nowMs;acc+=dt;
+  while(acc>=STEP){update(STEP);acc-=STEP;}
+  draw();
+  requestAnimationFrame(frame);
+}
+function update(dt){
+  if(S.scene==='play'){
+    const mi=measureNow();
+    // 小節替わり: おみとおし判定と表示更新
+    if(mi!==S.curMeasure){
+      if(S.curMeasure>=0)evalMeasureEnd(S.curMeasure);
+      S.extraTaps=0; S.curMeasure=mi;
+    }
+    // 「しーっ」の顔: がまんのコール中（＋わなヒント時はレスポンス中も）に本人が演じる
+    {
+      const mS=S.chart[Math.min(mi,S.measures-1)];
+      const want=(!S.outro&&mS&&mS.set&&mS.set.gaman&&
+        (mS.kind==='call'||(mS.kind==='resp'&&P.trapHint)))?1:0;
+      S.shush+=(want-S.shush)*Math.min(1,dt/110);
+    }
+    // 取り逃しmiss（okz過ぎた期待）
+    const okz=P.window/1000*OKX;
+    for(let k=Math.max(0,mi-1);k<=Math.min(S.measures-1,mi);k++){
+      for(const h of S.chart[k].hits){
+        if(h.state==='wait'&&nowA()>h.time+okz){
+          h.state='miss';S.counts.miss++;S.combo=0;
+          feedback('miss','<span class="miss">ミス…</span>');
+          thud(nowA()); S.vsy+=3;
+        }
+      }
+    }
+    const li=S.measures-1;
+    if(!S.outro&&nowA()>=S.mStart[li]+6*S.mSpb[li]){
+      evalMeasureEnd(li); // measureNowは最終小節でクランプされ「小節替わり」が来ない
+      // 余韻: 即リザルトにせず、ファンファーレ＋拍手＋褒めを先に（がんばりの受け止め）。
+      // 祝いの規模は正解率で変わる——高いほど盛大に。ただし低くても必ずねぎらう
+      const tot=S.counts.just+S.counts.ok+S.counts.miss+S.counts.trap;
+      const rate=tot?S.counts.just/tot:0;
+      S.outroTier=rate>=0.85?2:rate>=0.6?1:0;
+      S.outroDur=[3.0,3.8,4.6][S.outroTier];
+      S.outro=nowA(); S.outroFx=0;
+      endFanfare(nowA()+0.05);
+      applause(nowA()+0.45,[22,34,50][S.outroTier],[0.085,0.105,0.125][S.outroTier],
+        [1.7,2.4,3.2][S.outroTier]);
+      if(S.outroTier===2)victoryArp(nowA()+0.7);
+      feedback('ok','<span class="just">'+
+        ['🎉 さいごまで やりきった！','🎉 いいリズムだった！',
+         '🏆 きみ、リズムの もちぬしだ！'][S.outroTier]+'</span>');
+      S.fbUntil=nowA()+S.outroDur+0.5;
+      impact(S.outroTier===2?1.6:1.0); S.star=S.outroDur*1000;
+      burst(0,0,50+S.outroTier*35); bloom(0.1+0.04*S.outroTier);
+    }
+    if(S.outro){
+      const el=nowA()-S.outro;
+      const fxN=[3,5,9][S.outroTier];
+      if(S.outroFx<fxN&&el>0.5+S.outroFx*(S.outroTier===2?0.38:0.55)){ // 祝砲の追い打ち
+        S.outroFx++;
+        burst((Math.random()*2-1)*W*0.36,-H*0.5*(0.15+Math.random()*0.45),22+S.outroTier*8);
+      }
+      // 紙吹雪の雨（正解率が高いほど濃い。画面ぜんたいで祝う）
+      if(S.outroTier>=1&&S.parts.length<460&&Math.random()<[0,0.4,0.8][S.outroTier]){
+        const COLS=['#FFD34D','#FFB84D','#8BE29B','#7FD7EA','#B9A8E8','#FF6F61'];
+        S.parts.push({x:(Math.random()-0.5)*W,y:-CY()-12,
+          vx:(Math.random()-0.5)*1.6,vy:0.8+Math.random()*1.8,
+          r:2.5+Math.random()*3.5,life:1600,hue:45,col:COLS[(Math.random()*COLS.length)|0]});
+      }
+      if(el>=S.outroDur)endGame();
+    }
+  }
+  // ---- キャラ物理（素振り実験機から移植: 材質＋規律） ----
+  if(S.hitstop>0){S.hitstop-=dt;return;} // 演出停止。audio時計は当然動き続ける
+  let stiff=lerp(0.035,0.007,P.soft),damp=lerp(0.0025,0.028,P.goo),nk=lerp(0.010,0.030,P.soft);
+  let disc=0;
+  if(S.scene==='play'&&nowA()>=S.t0){
+    const ph=((beatInMeasure(measureNow())%1)+1)%1;
+    if(ph>0.45)disc=Math.min(1,(ph-0.45)/0.25); // 拍格子規律: 各拍後半で真円へ
+  }
+  if(S.settle>0){S.settle-=dt;disc=1;S.energy*=Math.pow(0.5,dt/90);}
+  if(disc>0){stiff=lerp(stiff,0.05,disc);damp=lerp(damp,0.05,disc);nk=lerp(nk,0.032,disc);}
+  const dampS=lerp(damp+lerp(0.012,0.06,P.hari),0.06,disc);
+  S.vsx+=(1-S.sx)*stiff*dt-S.vsx*dampS*dt; S.vsy+=(1-S.sy)*stiff*dt-S.vsy*dampS*dt;
+  S.vsx=Math.max(-6,Math.min(6,S.vsx));S.vsy=Math.max(-6,Math.min(6,S.vsy));
+  S.sx+=S.vsx*dt*0.06;S.sy+=S.vsy*dt*0.06;
+  S.sx=Math.max(0.25,Math.min(2.6,S.sx));S.sy=Math.max(0.25,Math.min(2.6,S.sy));
+  {const a=Math.max(0.35,S.sx*S.sy),corr=Math.pow(1/a,lerp(0.04,0.22,P.hari));S.sx*=corr;S.sy*=corr;}
+  const press=lerp(0.010,0.070,P.hari),pressD=lerp(0.012,0.06,P.hari);
+  const afterT=lerp(1600,350,P.goo);
+  S.energy*=Math.pow(0.5,dt/afterT);
+  const idle=lerp(0.0006,0.0085,P.soft)*S.energy;
+  let mo=0,mv=0;for(const p of S.pts){mo+=p.o;mv+=p.v;}mo/=NPT;mv/=NPT;
+  const o0=S.pts.map(p=>p.o);
+  for(let i=0;i<NPT;i++){
+    const p=S.pts[i],a2=o0[(i+NPT-1)%NPT],b2=o0[(i+1)%NPT];
+    p.v+=((0-o0[i])*stiff+(a2+b2-2*o0[i])*nk-mo*press-mv*pressD)*dt-p.v*damp*dt;
+    p.v+=Math.sin(S.tGlow*0.0021+i*2.399)*idle*dt;
+  }
+  for(const p of S.pts){p.o+=p.v*dt*0.06;p.o=Math.max(-0.4,Math.min(0.5,p.o));}
+  S.tGlow=(S.tGlow||0)+dt;
+  S.shake*=Math.pow(0.88,dt/16);S.zoomPulse*=Math.pow(0.90,dt/16);
+  S.star=Math.max(0,S.star-dt);S.jito=Math.max(0,S.jito-dt);S.relief=Math.max(0,S.relief-dt);
+  if(S.blink>0)S.blink-=dt;else{S.nextBlink-=dt;if(S.nextBlink<=0){S.blink=130;S.nextBlink=1500+Math.random()*2500;}}
+  for(const p of S.parts){p.life-=dt;p.x+=p.vx*dt*0.06;p.y+=p.vy*dt*0.06;p.vy+=0.008*dt;}
+  S.parts=S.parts.filter(p=>p.life>0);
+  // HUD
+  const el=document.getElementById('phase');
+  if(S.scene==='play'){
+    const mi=Math.min(measureNow(),S.measures-1);
+    const m=S.chart[mi];
+    if(S.outro){document.getElementById('phase').textContent='🎉 おつかれさま！';
+      document.getElementById('phase').className='resp';}
+    else if(m){
+      if(m.kind==='break'){el.textContent='✨ それじゃあ、ほんばん いくよ！';el.className='resp';}
+      else if(m.kind==='countin'){
+        const n=Math.max(1,Math.min(4,Math.floor(beatInMeasure(mi))+1));
+        el.textContent='🥁 カウント '+n+'…（まねなくて OK）';el.className='';}
+      else if(m.kind==='call'){
+        if(m.section==='hon') el.textContent='💪 ほんばん！ きいて…';
+        else el.textContent=(m.set&&m.set.gaman
+          ?'🤫 きいて…（「しーっ」が なったら、つぎは たたかない！）'
+          :m.set&&m.set.decoys
+          ?'🎧 きいて…（'+m.set.name+'・ひくい「ダ」は まねしない！）'
+          :'🎧 きいて…（'+m.set.name+'）');
+        el.className='call';}
+      else{
+        if(m.section==='hon') el.textContent='🔥 こたえて！';
+        else el.textContent=(m.set&&m.set.gaman?'🤫 がまん…！':'🔥 まねして！');
+        el.className='resp';}
+    }
+    document.getElementById('combo').textContent='コンボ '+S.combo+'　さいこう '+S.best;
+    if(S.fb&&nowA()>S.fbUntil){S.fb=null;document.getElementById('judge').innerHTML='';}
+  }
+}
+
+/* ---------- キャラ演出プリミティブ ---------- */
+function impact(k){S.hitstop=P.hitstop*k;S.shake=P.shake*k;S.zoomPulse=P.zoom*k;
+  S.vsy-=P.squash*8*k;S.vsx+=P.squash*6*k;}
+function poke(imp){const i0=3;for(let j=-2;j<=2;j++)S.pts[(i0+j+NPT)%NPT].v-=imp*(3-Math.abs(j))/3;
+  S.energy=Math.min(1,S.energy+0.25);}
+function bloom(imp){for(const p of S.pts)p.v+=imp;S.energy=1;}
+function burst(x,y,n){for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,v=2+Math.random()*6;
+  S.parts.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v-2,r:2+Math.random()*4,
+    life:400+Math.random()*400,hue:Math.random()<.5?45:280});}
+  if(S.parts.length>500)S.parts.splice(0,S.parts.length-500);}
+
+/* ---------- 描画 ---------- */
+function surfOff(ang){const u=(((ang%(Math.PI*2))+Math.PI*2)%(Math.PI*2))/(Math.PI*2)*NPT;
+  const i=Math.floor(u),f=u-i;return S.pts[i%NPT].o*(1-f)+S.pts[(i+1)%NPT].o*f;}
+function jl(x,y,r){const ang=Math.atan2(y,x),fr=Math.min(1,Math.hypot(x,y)/r*(0.9+0.6*P.soft));
+  const sc=1+surfOff(ang)*fr;return[x*sc,y*sc];}
+function beatPulse(){ // キックに同期した「体で拍を刻む」微パルス（形は真円のまま）
+  if(S.scene!=='play'||nowA()<S.t0)return 0;
+  const ph=((beatInMeasure(measureNow())%1)+1)%1;
+  return 0.05*Math.exp(-ph*7);
+}
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  ctx.save();
+  const shx=(Math.random()*2-1)*S.shake,shy=(Math.random()*2-1)*S.shake;
+  ctx.translate(W/2+shx,CY()+shy);ctx.scale(1+S.zoomPulse,1+S.zoomPulse);
+  const r=blobR();
+  // 粒
+  for(const p of S.parts){ctx.globalAlpha=Math.max(0,Math.min(1,p.life/400));
+    ctx.fillStyle=p.col||(p.hue===45?'#FFD34D':'#B9A8E8');
+    ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,7);ctx.fill();}
+  ctx.globalAlpha=1;
+  // 接近リング: 直近の期待ヒットごとに1拍かけて収縮（audio時計から直接駆動）
+  if(S.scene==='play'){
+    const mi=measureNow();
+    const rMax=Math.min(r*2.5,Math.min(W,H)*0.44);
+    const ring=(time,spb,solidHot,solidCold,dash)=>{ // 収縮リング共通
+      const dtb=(time-nowA())/spb;
+      if(dtb>1.05||dtb<-0.1)return;
+      const pr=Math.max(0,Math.min(1,1-dtb));
+      const rr=r+(rMax-r)*(1-pr);
+      const hot=Math.abs(time-nowA())*1000<=P.window;
+      ctx.strokeStyle=hot?solidHot:solidCold;
+      ctx.lineWidth=hot?6:3;
+      if(dash)ctx.setLineDash([7,7]);
+      ctx.beginPath();ctx.arc(0,0,rr,0,7);ctx.stroke();
+      ctx.setLineDash([]);
+    };
+    for(let k=Math.max(0,mi);k<=Math.min(S.measures-1,mi+1);k++){
+      const mk=S.chart[k];
+      for(const h of mk.hits){ // 叩く的: 実線
+        if(h.state!=='wait')continue;
+        ring(h.time,S.mSpb[k],'#FFD34D','#4a3f73',false);
+      }
+      for(const d of (mk.decoys||[])){ // ダの的: 来るけど叩かない
+        // 既定は通常の的と同じ見た目（コールが予告。答えを色で書かない）
+        if(P.trapHint) ring(d.time,S.mSpb[k],'#FF7A6B','#5a3040',true);
+        else ring(d.time,S.mSpb[k],'#FFD34D','#4a3f73',false);
+      }
+      if(mk.kind==='resp'&&mk.set&&mk.set.gaman){ // がまん: 4拍ぶんの誘惑リング
+        for(let b=1;b<=4;b++){
+          const tt=S.mStart[k]+(b-1)*S.mSpb[k];
+          if(P.trapHint) ring(tt,S.mSpb[k],'#FF7A6B','#5a3040',true);
+          else ring(tt,S.mSpb[k],'#FFD34D','#4a3f73',false);
+        }
+      }
+    }
+    // コール小節: 手本のタイミングを点で予告（音と同じ拍にフラッシュ）
+    const m=S.chart[Math.min(mi,S.measures-1)];
+    if(m&&m.kind==='call'){
+      const bin=beatInMeasure(mi);
+      m.pat.forEach(b=>{
+        const d=Math.abs(bin-(b-1));
+        const glow=d<0.12?1:0;
+        const ang=-Math.PI/2+((b-1)/4)*Math.PI*2;
+        ctx.fillStyle=glow?'#7FD7EA':'#3d3260';
+        ctx.beginPath();ctx.arc(Math.cos(ang)*r*1.6,Math.sin(ang)*r*1.6,glow?10:6,0,7);ctx.fill();
+      });
+      (m.set&&m.set.decoys||[]).forEach(b=>{ // ダ=赤いドット（まねしない目印）
+        const d=Math.abs(bin-(b-1));
+        const glow=d<0.12?1:0;
+        const ang=-Math.PI/2+((b-1)/4)*Math.PI*2;
+        ctx.fillStyle=glow?'#FF7A6B':'#5a3040';
+        ctx.beginPath();ctx.arc(Math.cos(ang)*r*1.6,Math.sin(ang)*r*1.6,glow?10:6,0,7);ctx.fill();
+      });
+    }
+  }
+  // 祝いの放射リング（かんぺきのみ・接近リングの逆＝解き放つ動き。体のうしろ）
+  if(S.outro&&S.outroTier===2&&S.scene==='play'){
+    const el=nowA()-S.outro, rMx=Math.min(W,H)*0.52;
+    for(let j=0;j<3;j++){
+      const ph=((el*0.55)+j/3)%1;
+      ctx.globalAlpha=(1-ph)*0.4;
+      ctx.strokeStyle='#FFD34D';ctx.lineWidth=2+5*(1-ph);
+      ctx.beginPath();ctx.arc(0,0,r+(rMx-r)*ph,0,7);ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+  }
+  // 体
+  ctx.save();
+  const be=1+beatPulse();
+  ctx.scale(S.sx*be,S.sy*be);
+  const grad=ctx.createRadialGradient(-r*.3,-r*.4,r*.2,0,0,r*1.1);
+  grad.addColorStop(0,'#C9B6F5');grad.addColorStop(1,'#8E6FE0');
+  ctx.fillStyle=grad;
+  ctx.beginPath();
+  const pr=i=>r*(1+S.pts[((i%NPT)+NPT)%NPT].o);
+  const px=i=>Math.cos(Math.PI*2*i/NPT)*pr(i),py=i=>Math.sin(Math.PI*2*i/NPT)*pr(i);
+  ctx.moveTo((px(0)+px(1))/2,(py(0)+py(1))/2);
+  for(let i=1;i<=NPT;i++)ctx.quadraticCurveTo(px(i),py(i),(px(i)+px(i+1))/2,(py(i)+py(i+1))/2);
+  ctx.closePath();ctx.fill();
+  // 顔（体と同じ物質）
+  ctx.fillStyle='#241d3a';
+  const blink=S.blink>0?0.1:1;
+  const [lx,ly]=jl(-r*.3,-r*.08,r),[rx,ry]=jl(r*.3,-r*.08,r);
+  if(S.star>0){starEye(lx,ly,r*.15);starEye(rx,ry,r*.15);}
+  else if(S.relief>0){ // ほっとした目（∪ ∪）
+    ctx.strokeStyle='#241d3a';ctx.lineWidth=r*0.05;ctx.lineCap='round';
+    ctx.beginPath();ctx.arc(lx,ly,r*.09,Math.PI*1.1,Math.PI*1.9);ctx.stroke();
+    ctx.beginPath();ctx.arc(rx,ry,r*.09,Math.PI*1.1,Math.PI*1.9);ctx.stroke();
+    ctx.fillStyle='#241d3a';
+  }
+  else if(S.jito>0){ctx.fillRect(lx-r*.12,ly-r*.02,r*.24,r*.05);ctx.fillRect(rx-r*.12,ry-r*.02,r*.24,r*.05);}
+  else if(S.shush>0.5){ // 伏せ目（しーっ。😌系のまぶた。∪∪のほっと目とは逆カーブで描き分け）
+    ctx.strokeStyle='#241d3a';ctx.lineWidth=r*0.05;ctx.lineCap='round';
+    ctx.beginPath();ctx.arc(lx,ly-r*.05,r*.09,Math.PI*0.15,Math.PI*0.85);ctx.stroke();
+    ctx.beginPath();ctx.arc(rx,ry-r*.05,r*.09,Math.PI*0.15,Math.PI*0.85);ctx.stroke();
+    ctx.fillStyle='#241d3a';}
+  else{ctx.beginPath();ctx.ellipse(lx,ly,r*.085,r*.13*blink,0,0,7);ctx.fill();
+    ctx.beginPath();ctx.ellipse(rx,ry,r*.085,r*.13*blink,0,0,7);ctx.fill();}
+  ctx.strokeStyle='#241d3a';ctx.lineWidth=r*0.055;ctx.lineCap='round';
+  const [mx,my]=jl(0,r*.2,r);
+  if(S.shush>0.5){ // 口をすぼめる（ふー、の形）
+    ctx.beginPath();ctx.arc(mx,my,r*.055,0,7);ctx.stroke();
+  }else{
+    ctx.beginPath();ctx.arc(mx,my,r*.19*(1-S.shush*0.6),Math.PI*0.15,Math.PI*0.85);ctx.stroke();
+  }
+  ctx.restore();
+  // でっかい褒め（画面ぜんたいで労う。ポップイン→ゆらゆら）
+  if(S.outro&&S.scene==='play'){
+    const el=nowA()-S.outro;
+    const pop=Math.min(1,el/0.35), ease=1-Math.pow(1-pop,3);
+    const word=['おつかれさま！','すごい！','かんぺき！！'][S.outroTier];
+    const fs=Math.min(W,H)*[0.085,0.105,0.13][S.outroTier];
+    ctx.save();
+    ctx.translate(0,-Math.min(H*0.27,r*2.6));
+    ctx.rotate(Math.sin(el*2.6)*0.035*(S.outroTier?1:0.4));
+    ctx.scale(0.5+0.5*ease,0.5+0.5*ease);
+    ctx.font='800 '+Math.round(fs)+'px "Hiragino Maru Gothic ProN","BIZ UDPGothic","Noto Sans JP",sans-serif';
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.globalAlpha=pop;
+    ctx.shadowColor='#FFD34D';ctx.shadowBlur=S.outroTier===2?30:12;
+    ctx.fillStyle=S.outroTier===2?'#FFD34D':'#EDE7F8';
+    ctx.fillText(word,0,0);
+    ctx.restore();
+  }
+  ctx.restore();
+  if(S.scene==='play'&&P.inputMode==='pad'){ // 親指ゾーンの帯（位置つき）
+    ctx.fillStyle='rgba(255,184,77,0.07)';
+    ctx.strokeStyle='rgba(255,184,77,0.35)';ctx.lineWidth=2;
+    if(P.padSide==='right'){ctx.fillRect(W*0.66,0,W*0.34,H);
+      ctx.beginPath();ctx.moveTo(W*0.66,0);ctx.lineTo(W*0.66,H);ctx.stroke();}
+    else if(P.padSide==='left'){ctx.fillRect(0,0,W*0.34,H);
+      ctx.beginPath();ctx.moveTo(W*0.34,0);ctx.lineTo(W*0.34,H);ctx.stroke();}
+    else{ctx.fillRect(0,H*0.72,W,H*0.28);
+      ctx.beginPath();ctx.moveTo(0,H*0.72);ctx.lineTo(W,H*0.72);ctx.stroke();}
+  }
+}
+function starEye(x,y,r){ctx.save();ctx.translate(x,y);ctx.fillStyle='#FF6F61';
+  ctx.beginPath();for(let i=0;i<10;i++){const a=Math.PI*i/5-Math.PI/2,rr=i%2?r*.45:r;
+    ctx.lineTo(Math.cos(a)*rr,Math.sin(a)*rr);}ctx.closePath();ctx.fill();ctx.restore();}
+
+/* ---------- UI配線 ---------- */
+document.querySelectorAll('.bpms button').forEach(b=>{
+  b.addEventListener('click',()=>{P.bpm=+b.dataset.bpm;
+    document.querySelectorAll('.bpms button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');});
+});
+const thEl=document.getElementById('traphint');
+thEl.checked=P.trapHint;
+thEl.addEventListener('change',()=>P.trapHint=thEl.checked);
+const skEl=document.getElementById('skiptut'),acEl=document.getElementById('accel');
+skEl.checked=P.skipTut; acEl.checked=P.accel;
+skEl.addEventListener('change',()=>P.skipTut=skEl.checked);
+acEl.addEventListener('change',()=>P.accel=acEl.checked);
+document.getElementById('go').addEventListener('click',()=>{ac();startGame();});
+document.getElementById('stopbtn').addEventListener('click',()=>{S.scene='title';endGame();});
+document.getElementById('setbtn').addEventListener('click',()=>{
+  document.getElementById('panel').classList.toggle('open');});
+const lat=document.getElementById('latency'),latV=document.getElementById('latencyV');
+lat.addEventListener('input',()=>{P.latency=+lat.value;latV.textContent=lat.value+'ms';});
+document.querySelectorAll('.im:not(.ps)').forEach(b=>{
+  b.addEventListener('click',()=>{P.inputMode=b.dataset.im;
+    document.querySelectorAll('.im:not(.ps)').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');});
+});
+document.querySelectorAll('.ps').forEach(b=>{
+  b.addEventListener('click',()=>{P.padSide=b.dataset.ps;
+    document.querySelectorAll('.ps').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');});
+});
+const wsl=document.getElementById('winsl'),wV=document.getElementById('winV');
+wsl.addEventListener('input',()=>{P.window=+wsl.value;wV.textContent='±'+wsl.value+'ms';});
+
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
