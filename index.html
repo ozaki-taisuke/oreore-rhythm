@@ -57,6 +57,8 @@
   .bpms button{flex:1;padding:10px 2px;line-height:1.5}
   .bpms button small{display:block;font-size:17px;font-variant-numeric:tabular-nums}
   .bpms button.on{background:#FFB84D;border-color:#FFB84D;color:#241d3a}
+  .stages button small{font-size:11px;font-weight:500;opacity:.75}
+  .stages button.on{background:#7FD7EA;border-color:#7FD7EA}
   #screen .go{background:#FF6F61;border-color:#FF6F61;padding:14px 42px;font-size:18px}
   .opts{display:flex;gap:18px;flex-wrap:wrap;justify-content:center;color:#b9ace0;font-size:13.5px}
   .opts label{display:flex;align-items:center;gap:8px;cursor:pointer}
@@ -70,6 +72,13 @@
     background:#FFD34D;animation:tglpop .18s ease-out}
   @keyframes tglpop{from{transform:scale(.3)}to{transform:scale(1)}}
   .ver{color:#5f5388;font-size:11px;letter-spacing:.04em}
+  /* タイトル画面ジャム席: たたくと看板がぽよんと鳴る（マリオ64の顔あそび） */
+  #screen h1.pop{animation:h1pop .28s ease-out}
+  @keyframes h1pop{0%{transform:scale(1)}30%{transform:scale(1.12,.88)}
+    60%{transform:scale(.94,1.07)}100%{transform:scale(1)}}
+  /* タップ位置の粒（本番ジャム席と同じ声・同じ紫。薄く・目立たず・すぐ消える） */
+  .jamp{position:fixed;border-radius:50%;background:#B9A8E8;
+    pointer-events:none;z-index:60}
   #result{font-size:15px;line-height:2}
   #result b{font-size:26px;color:#FFD34D}
   #result .cnt{color:#9d90c4;font-size:13.5px}
@@ -78,7 +87,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="ui">
-  <div class="ttl">オレオレ<span>リズム</span> 🥁</div>
+  <div class="ttl">オレオレ<span>リズム</span> <span id="brandmoji">🥁</span></div>
   <button id="stopbtn" style="display:none">やめる</button>
   <button id="setbtn">⚙️</button>
 </div>
@@ -110,11 +119,15 @@
   </div>
 </div>
 <div id="screen">
-  <h1>オレオレ<span>リズム</span> 🥁</h1>
-  <div class="sub">きいて → まねして、の コール&レスポンス。<br>
+  <h1>オレオレ<span>リズム</span> <span id="stagemoji">🥁</span></h1>
+  <div class="sub">きいて → こたえる、の コール&レスポンス。🔊 <b>おとが でるよ！</b><br>
     <b>まと（まんなかの子）をタップ</b>＝しょうぶ。おなじリズムで こたえよう。<br>
-    <b>まとの外</b>＝ジャム席。すきに たたいてOK（場所で 音が 変わるよ）。<br>
-    まとへの れんだだけは……👀おみとおし。</div>
+    <b>まとの外</b>＝ジャム席。すきに たたいてOK（場所で 音が 変わるよ。<br>
+    この画面も たたいて ためせるよ）。まとへの れんだだけは……👀おみとおし。</div>
+  <div class="bpms stages">
+    <button data-stage="beat" class="on">うちこみビート<small>きいて→こたえて</small></button>
+    <button data-stage="quiz">うちこめビーム<small>あてはまる カードを うちおとせ</small></button>
+  </div>
   <div class="bpms">
     <button data-bpm="110">やさしい<small>110</small></button>
     <button data-bpm="130" class="on">ふつう<small>130</small></button>
@@ -127,7 +140,7 @@
   </div>
   <div id="result"></div>
   <button class="go" id="go">はじめる！</button>
-  <div class="ver">オレオレリズム v0.1.0（フェーズ1・うちこみビート）</div>
+  <div class="ver">オレオレリズム v0.2.0（うちこみビート ＋ うちこめビーム）</div>
 </div>
 
 <script>
@@ -142,6 +155,7 @@
 const P={
   inputMode:'target',   // 'target'=まと / 'pad'=帯(親指ゾーン) / 'full'=全画面(DSゴールド方式)
   padSide:'bottom',     // 'bottom'/'right'/'left' 縦横持ち×利き手対応（DSは本体を持ち替えたがソフトなら選べる）
+  stage:'beat',         // 'beat'=うちこみビート / 'quiz'=うちこめビーム（述語リズム第1号）
   bpm:130, window:100,  // ジャスト窓 ±ms（OK帯はその2.2倍）
   skipTut:false, accel:false,
   trapHint:false,       // ON=わなを赤破線で表示（補助輪）。既定は的を平等に出す（耳と記憶のテスト）
@@ -155,6 +169,10 @@ if(qs.get('bpm'))P.bpm=+qs.get('bpm');
 if(qs.get('skip'))P.skipTut=true;
 if(qs.get('accel'))P.accel=true;
 if(qs.get('traphint'))P.trapHint=true;
+if(qs.get('stage'))P.stage=qs.get('stage');
+// うちこめビーム: 問数（前半＋後半）。既定8=お題1つにつき4ペア=8小節。
+// 8小節はポップスの1フレーズ（4小節の問い×答え）＝お題1つを「ワンコーラス」で回す
+const QUIZ_Q=()=>qs.get('q')?+qs.get('q'):8;
 const TUT_PAIRS=qs.get('pairs')?+qs.get('pairs'):2;   // れんしゅう: セットあたりのペア数
 // ほんばんのペア数はbuildChart時に決める（とばす時は長め。熱狂してきた頃に終わらせない）
 const honPairs=()=>qs.get('honban')?+qs.get('honban'):(P.skipTut?16:12);
@@ -170,6 +188,51 @@ const POOL=[
 ];
 const GAMAN={name:'がまん', pat:[], gaman:true}; // 叩いたら負け。単独セットにはしない
 // （ひっかけは普通の間に潜んでこそ。予告は専用の合図音「しーっ」で行う）
+
+/* ---------- うちこめビーム: お題ファミリー（述語の金型群）。
+   練習はファミリーの代表例を1ペアずつ、本番は毎問ランダムなインスタンスを鋳造。
+   「7のだんじゃない」で練習して本番で「3のだん」が出てもいい——
+   覚えるのは個々の答えでなくルールの形。算数（①②）も国語（③④）も使う ---------- */
+const GYOU={'あ':'あいうえお','か':'かきくけこ','さ':'さしすせそ','た':'たちつてと',
+  'な':'なにぬねの','は':'はひふへほ','ま':'まみむめも','ら':'らりるれろ'};
+const DAN={'あ':'あかさたなはまやらわ','い':'いきしちにひみり','う':'うくすつぬふむゆる',
+  'え':'えけせてねへめれ','お':'おこそとのほもよろを'};
+const pickCh=(r,s)=>s[Math.floor(r()*s.length)];
+const FAMILIES=[
+  {fam:'parity', // ① きすう・ぐうすう
+   inst(r){const odd=r()<0.5;
+     return {fam:'parity',odd, // 「2で」を明記（大人に重箱の隅を突かれない正確さ）
+       label:odd?'きすうを うて！（2で われない かず）':'ぐうすうを うて！（2で われる かず）',
+       match:v=>v%2===(odd?1:0),
+       mGen:rr=>odd?1+2*Math.floor(rr()*24):2*(1+Math.floor(rr()*24)),
+       xGen:rr=>odd?2*(1+Math.floor(rr()*24)):1+2*Math.floor(rr()*24)};}},
+  {fam:'mult',   // ② Xのだん（九九）
+   // 否定形お題（「Xのだんじゃない」「XX以外」）は封印中: 混乱するし連打ゲーになる。
+   // 復活させるなら pos=r()<0.5 に戻すだけ（label/match/mGen/xGenは両対応のまま）
+   inst(r){const X=3+Math.floor(r()*7), pos=true; // X=3..9
+     return {fam:'mult',X,pos,
+       label:pos?X+'のだんの かずを うて！（'+X+'・'+X*2+'・'+X*3+'…）'
+                :X+'のだんじゃない かずを うて！',
+       match:v=>(v%X===0)===pos,
+       mGen:rr=>{const m=X*(1+Math.floor(rr()*9));
+         if(pos)return m; let v;do{v=2+Math.floor(rr()*(X*9-1));}while(v%X===0);return v;},
+       xGen:rr=>{const m=X*(1+Math.floor(rr()*9));
+         if(!pos)return m; let v;do{v=2+Math.floor(rr()*(X*9-1));}while(v%X===0);return v;}};}},
+  {fam:'gyou',   // ③ ○のぎょう（五十音の縦）
+   inst(r){const rows=Object.keys(GYOU), R=rows[Math.floor(r()*rows.length)];
+     const others=rows.filter(x=>x!==R).map(x=>GYOU[x]).join('');
+     return {fam:'gyou',row:R,
+       label:'「'+R+'」の ぎょうを うて！（'+GYOU[R].split('').join('・')+'）',
+       match:v=>GYOU[R].includes(v),
+       mGen:rr=>pickCh(rr,GYOU[R]), xGen:rr=>pickCh(rr,others)};}},
+  {fam:'dan',    // ④ ○のだん（五十音の横）
+   inst(r){const dans=Object.keys(DAN), D=dans[Math.floor(r()*dans.length)];
+     const others=dans.filter(x=>x!==D).map(x=>DAN[x]).join('');
+     return {fam:'dan',dan:D,
+       label:'「'+D+'」の だんを うて！（'+DAN[D].slice(0,4).split('').join('・')+'…）',
+       match:v=>DAN[D].includes(v),
+       mGen:rr=>pickCh(rr,DAN[D]), xGen:rr=>pickCh(rr,others)};}},
+];
 let rngState=(+qs.get('seed')||((Math.random()*1e9)|0))>>>0;
 function rng(){rngState=(rngState*1664525+1013904223)>>>0;return rngState/4294967296;}
 
@@ -205,6 +268,8 @@ const bass =(t,f)=>tone(t,f,.22,.16,'triangle');
 const cueA =t=>tone(t,780,.09,.26,'square');   // コールの「手本」音（タン）
 const cueDa=t=>tone(t,320,.10,.30,'square',-60); // まねしちゃダメな音（ダ）
 const countTone=(t,one)=>tone(t,one?1046:698,.05,.12,'sine'); // ただのカウント（手本の声と別）
+const snapClick=t=>tone(t,1900,.02,.05,'square'); // カード着地の「カチッ」（お試し。中立音・語彙外）
+const beamZap=t=>{tone(t,1560,.09,.15,'square',-1260);tone(t,780,.05,.06,'square',-620);} // ビーム「ピュン」（撃った音。クイズ専用の声）
 function relief(t){ tone(t,392,.16,.10,'sine'); tone(t+0.12,523,.22,.10,'sine'); } // ほっ…（静かなごほうび）
 const dingJ=t=>{tone(t,523,.16,.2);tone(t,784,.16,.14);tone(t,1046,.2,.1);} // ジャスト
 const dingO=t=>tone(t,440,.09,.14);
@@ -242,12 +307,90 @@ const S={
   hitstop:0, shake:0, zoomPulse:0, parts:[],
   outro:0, outroFx:0,   // 曲おわりの余韻（拍手と褒めを済ませてからリザルトへ）
   outroTier:0, outroDur:3.0, // 褒めの段階（正解率で祝いの規模が変わる。参加もねぎらう）
+  perfect:false,        // 全判定ジャスト＋おみとおしゼロ（tier3。やりこみの頂）
 };
 const NPT=14;
 window.__R={P,S,judgeAt:null}; // テスト用フック
 
 /* ---------- 譜面生成 ---------- */
+function buildQuizChart(){
+  // 方式: うちこみビートと同じコール&レスポンス（点の代わりにカード）。
+  // お題が変わるたびの共通儀式: おだい4拍（具体的なお題を中央にどーん・読む時間）→
+  // いくよ？4拍（Ready）。ビートは一度も止めない（ピポポン無し）。
+  // れんしゅう=①〜④を1ペアずつ（水色ヒント・実プレイ・失敗はノーカウント）、
+  // 本番=算数系と国語系をひとつずつ（前半・後半でお題固定）
+  S.chart=[];
+  const famFilter=qs.get('fam'); // 検証用: ?fam=parity 等でファミリー固定
+  const fams=famFilter?FAMILIES.filter(f=>f.fam===famFilter):FAMILIES;
+  const pushOdai=(inst,hint)=>{ // お題替えの儀式（れんしゅうの各回も本番も同じルール）
+    S.chart.push({kind:'odai',inst,hint,pat:[],hits:[]});
+    S.chart.push({kind:'countin',inst,hint,pat:[1,2,3,4],hits:[]});
+  };
+  const pushPair=(section,q,hint,inst)=>{
+    const n=2+Math.floor(rng()*3); // カード2〜4枚
+    const beats=[1,2,3,4];
+    for(let i=3;i>0;i--){const j=Math.floor(rng()*(i+1));[beats[i],beats[j]]=[beats[j],beats[i]];}
+    const chosen=beats.slice(0,n).sort((a,b)=>a-b);
+    let flags;
+    do{ flags=chosen.map(()=>rng()<0.5); }while(!flags.some(f=>f)); // 最低1枚はあてはまる
+    const used=new Set(), items=[];
+    chosen.forEach((b,i)=>{
+      let v,guard=0;
+      do{ v=flags[i]?inst.mGen(rng):inst.xGen(rng); }while(used.has(v)&&++guard<30);
+      used.add(v);
+      items.push({beat:b,v,odd:flags[i]});
+    });
+    S.chart.push({kind:'qcall',section,honPair:q,hint,inst,items,pat:[],hits:[],set:{decoys:[]}});
+    S.chart.push({kind:'quiz',section,honPair:q,hint,inst,items,
+      pat:items.filter(i=>i.odd).map(i=>i.beat),
+      set:{decoys:items.filter(i=>!i.odd).map(i=>i.beat)}});
+  };
+  if(!P.skipTut){ // れんしゅう: ①〜④を2ペアずつ（うちこみビートのTUT_PAIRSと同じ尺）。
+    // お題は1小節ごとにパカパカ替えない——替えるのは待機ビート（odai+いくよ）を経る時だけ
+    fams.forEach((f,i)=>{const inst=f.inst(rng);pushOdai(inst,true);
+      for(let p=0;p<TUT_PAIRS;p++)pushPair('tut',i,true,inst);});
+    // 練習↔本番の境界だけはビートを区切る（うちこみビートと同じ:
+    // ピロリン→にっこり→「ほんばんいくよ！」。静けさ=区切りの語彙はここでだけ使う）
+    S.chart.push({kind:'break',hits:[]});
+  }
+  // 本番: 算数（①②）と国語（③④）からひとつずつ。出す順はランダム・半分ずつお題固定
+  const math=fams.filter(f=>f.fam==='parity'||f.fam==='mult');
+  const lang=fams.filter(f=>f.fam==='gyou'||f.fam==='dan');
+  const pick=a=>a[Math.floor(rng()*a.length)];
+  let insts;
+  if(math.length&&lang.length){
+    insts=[pick(math).inst(rng),pick(lang).inst(rng)];
+    if(rng()<0.5)insts.reverse();
+  }else insts=[pick(fams).inst(rng),pick(fams).inst(rng)]; // ?fam=固定時の保険
+  const half=Math.ceil(QUIZ_Q()/2);
+  insts.forEach((inst,hi)=>{
+    pushOdai(inst,false);
+    for(let q=0;q<half;q++)pushPair('hon',hi*half+q,false,inst);
+  });
+}
 function buildChart(){
+  if(P.stage==='quiz'){buildQuizChart();}
+  else buildBeatChart();
+  S.measures=S.chart.length;
+  // テンポマップ: 小節ごとにBPMを割当（かそく: ほんばん/問ごとに+6、最大+48）
+  S.mStart=[];S.mSpb=[];
+  let t=S.t0;
+  S.chart.forEach(m=>{
+    let bpm=P.bpm;
+    if(P.accel&&m.section==='hon')bpm=P.bpm+Math.min(48,(m.honPair||0)*6);
+    const spb=60/bpm;
+    S.mStart.push(t);S.mSpb.push(spb);
+    t+=4*spb;
+  });
+  // レスポンス/クイズ小節の期待ヒット・ダにaudio絶対時刻を張る
+  S.chart.forEach((m,mi)=>{
+    if(m.kind!=='resp'&&m.kind!=='quiz')return;
+    m.hits=m.pat.map(b=>({beat:b,time:S.mStart[mi]+(b-1)*S.mSpb[mi],state:'wait'}));
+    m.decoys=(m.set&&m.set.decoys||[]).map(b=>({beat:b,time:S.mStart[mi]+(b-1)*S.mSpb[mi]}));
+    if(m.kind==='quiz')m.items.forEach(it=>{it.time=S.mStart[mi]+(it.beat-1)*S.mSpb[mi];});
+  });
+}
+function buildBeatChart(){
   S.chart=[{kind:'countin',pat:[1,2,3,4],hits:[]}];
   const pair=(set,section,honPair)=>{
     S.chart.push({kind:'call',set,pat:set.pat,hits:[],section,honPair});
@@ -294,23 +437,6 @@ function buildChart(){
     }
     pair(set,'hon',p);
   }
-  S.measures=S.chart.length;
-  // テンポマップ: 小節ごとにBPMを割当（かそく: ほんばんでペアごとに+6、最大+48）
-  S.mStart=[];S.mSpb=[];
-  let t=S.t0;
-  S.chart.forEach(m=>{
-    let bpm=P.bpm;
-    if(P.accel&&m.section==='hon')bpm=P.bpm+Math.min(48,(m.honPair||0)*6);
-    const spb=60/bpm;
-    S.mStart.push(t);S.mSpb.push(spb);
-    t+=4*spb;
-  });
-  // レスポンス小節の期待ヒット/ダにaudio絶対時刻を張る
-  S.chart.forEach((m,mi)=>{
-    if(m.kind!=='resp')return;
-    m.hits=m.pat.map(b=>({beat:b,time:S.mStart[mi]+(b-1)*S.mSpb[mi],state:'wait'}));
-    m.decoys=(m.set&&m.set.decoys||[]).map(b=>({beat:b,time:S.mStart[mi]+(b-1)*S.mSpb[mi]}));
-  });
 }
 
 /* ---------- スケジューラ（先読み120ms・8分解像度） ---------- */
@@ -353,6 +479,9 @@ function scheduler(){
       if(m.kind==='countin' && S.schedE%2===0) countTone(t,bin===0);
       if(m.kind==='call'&&m.set&&m.set.decoys&&m.set.decoys.includes(bin+1)) cueDa(t);
       if(m.kind==='call'&&m.set&&m.set.gaman&&(bin===0||bin===2)) shush(t); // 予告: しーっ×2
+      // qcall: カードの拍で中立の「カチッ」（全カード同じ音。耳はリズムだけ運ぶ、
+      // あてはまるかどうかは音に書かない）
+      if(m.kind==='qcall'&&m.items&&m.items.some(i=>i.beat===bin+1)) snapClick(t);
     }
     S.schedE++; if(S.schedE>=8){S.schedE=0;S.schedM++;}
   }
@@ -375,7 +504,7 @@ function startGame(){
   S.t0=a.currentTime+0.8;
   S.schedM=0; S.schedE=0; S._mi=0;
   S.counts={just:0,ok:0,miss:0,spam:0,trap:0,taps:0};
-  S.combo=0;S.best=0;S.curMeasure=-1;S.fb=null;S.outro=0;S.outroFx=0;S.shush=0;
+  S.combo=0;S.best=0;S.curMeasure=-1;S.fb=null;S.outro=0;S.outroFx=0;S.shush=0;S.perfect=false;
   document.getElementById('judge').innerHTML=''; // 前プレイの判定（+XXms等）を持ち越さない
   buildChart();
   document.getElementById('screen').classList.add('hide');
@@ -386,7 +515,8 @@ function endGame(){
   document.getElementById('stopbtn').style.display='none';
   const c=S.counts, total=c.just+c.ok+c.miss+c.trap;
   const rate=total?c.just/total:0;
-  const rank= rate>=0.85?'かんぺき！！':rate>=0.6?'すごい！':rate>=0.35?'まあまあ':'れんしゅうだ！';
+  const rank= S.perfect?'👑 パーフェクト！！！'
+    :rate>=0.85?'かんぺき！！':rate>=0.6?'すごい！':rate>=0.35?'まあまあ':'れんしゅうだ！';
   document.getElementById('result').innerHTML=
     '<b>'+rank+'</b><br>'+
     '<span class="cnt">ジャスト '+c.just+'　OK '+c.ok+'　ミス '+c.miss+
@@ -401,13 +531,13 @@ function judgeAt(tapT){ // tapT: audio時刻（補正済みで渡す）
   S.counts.taps++;
   const win=P.window/1000, okz=win*OKX;
   // 近傍の未ヒット期待を探す（現在±1小節）
-  let bestHit=null,bestOff=1e9;
+  let bestHit=null,bestOff=1e9,bestHitM=-1;
   const mi=measureNow();
   for(let k=Math.max(0,mi-1);k<=Math.min(S.measures-1,mi+1);k++){
     for(const h of S.chart[k].hits){
       if(h.state!=='wait')continue;
       const off=tapT-h.time;
-      if(Math.abs(off)<Math.abs(bestOff)){bestOff=off;bestHit=h;}
+      if(Math.abs(off)<Math.abs(bestOff)){bestOff=off;bestHit=h;bestHitM=k;}
     }
   }
   // 最寄りの「的」が勝つ: タンよりダのほうが近いタップはわな
@@ -420,13 +550,28 @@ function judgeAt(tapT){ // tapT: audio時刻（補正済みで渡す）
     }
   }
   if(Math.abs(bestDa)<=okz&&(!bestHit||Math.abs(bestDa)<Math.abs(bestOff))){
-    if(bestDaM>=0)S.chart[bestDaM].trapped=true; // ぜんぶダ小節のごほうび判定用
+    const dm=bestDaM>=0?S.chart[bestDaM]:null;
+    // れんしゅうでも誤射は本番と同じ扱い（thud・赤枠・コメント・加算）——
+    // 「間違うとこうなる」を安全に体験するのが練習。全部撃ちたい好奇心も歓迎
+    if(dm)dm.trapped=true; // ぜんぶダ小節のごほうび判定用
     S.counts.trap++; S.combo=0; S.jito=900; S.settle=340;
-    feedback('miss','<span class="miss">ダ！ それは まねしない…！</span>');
+    if(dm&&dm.kind==='quiz'){ // うちこめビーム: おだいに合わないカードを撃ってしまった
+      feedback('miss','<span class="miss">あっ、それは おだいと ちがう…！</span>');
+      const it=dm.items.find(i=>!i.odd&&Math.abs(i.time-tapT)<=okz&&
+        Math.abs(i.time-tapT)<=Math.abs(bestDa)+1e-6);
+      if(it)it.struckAt=nowA(); // カードを赤く震わせる用
+    }else{
+      feedback('miss','<span class="miss">ダ！ それは まねしない…！</span>');
+    }
     thud(nowA()); S.vsy+=3;
     return 'trap';
   }
   if(bestHit&&Math.abs(bestOff)<=okz){
+    const hm=S.chart[bestHitM];
+    if(hm&&hm.kind==='quiz'){ // ビームで撃墜（消滅アニメはカード側が拾う）
+      beamZap(nowA());
+      const zit=hm.items.find(i=>i.beat===bestHit.beat); if(zit)zit.zapAt=nowA();
+    }
     const ms=Math.round(bestOff*1000);
     if(Math.abs(bestOff)<=win){
       bestHit.state='just'; S.counts.just++; S.combo++; S.best=Math.max(S.best,S.combo);
@@ -485,8 +630,9 @@ cv.addEventListener('pointerdown',(e)=>{
 });
 function adlib(x,y){
   const f=180+260*Math.min(1,Math.max(0,(x/W+0.5)));   // 位置で音程が変わる
+  // 伴奏のハットと同じ声は使わない（1音色=1意味: ジャム席は「じぶんの太鼓」の声）
   tone(nowA(),f,.08,.13,'triangle',-40);
-  hat(nowA());
+  tone(nowA(),f*2.6,.045,.07,'sine',-140); // 打面のアタック（ポンッ）
   for(let i=0;i<6;i++){const a=Math.random()*Math.PI*2,v=1.5+Math.random()*3;
     S.parts.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v-1,r:2+Math.random()*3,
       life:300,hue:280});}
@@ -495,8 +641,9 @@ function adlib(x,y){
 /* 小節末の評価（がまん/ぜんぶダのごほうび・おみとおし）。二重呼び出しはevaledで防ぐ */
 function evalMeasureEnd(idx){
   const pm=S.chart[idx];
-  if(!pm||pm.kind!=='resp'||pm.evaled)return;
+  if(!pm||(pm.kind!=='resp'&&pm.kind!=='quiz')||pm.evaled)return;
   pm.evaled=true;
+  if(pm.kind==='quiz'&&pm.hint)return; // れんしゅう: 静かに（正解の褒めはjudgeAtが済ませている）
   if(pm.set&&pm.set.gaman){
     if(!pm.failed){ // 成功: 静かなごほうび（★もヒットストップもなし。点はジャスト扱い）
       S.counts.just++; S.combo++; S.best=Math.max(S.best,S.combo);
@@ -505,9 +652,10 @@ function evalMeasureEnd(idx){
     } // 失敗は叩いた瞬間に宣告済み
   }
   else if(pm.hits.length===0&&(pm.decoys||[]).length>0&&!pm.trapped&&S.extraTaps===0){
-    // ぜんぶダ（けずりの実質全休符）: がまんと同格。やり過ごせたら静かなごほうび
+    // 撃たないのが正解の小節（ぜんぶダ／クイズの見送り）: 静かなごほうび
     S.counts.just++; S.combo++; S.best=Math.max(S.best,S.combo);
-    feedback('ok','<span class="ok">…ぜんぶ ダ！ みぬいた（えらい）</span>');
+    feedback('ok','<span class="ok">'+(pm.kind==='quiz'
+      ?'…みおくり せいかい！（えらい）':'…ぜんぶ ダ！ みぬいた（えらい）')+'</span>');
     relief(nowA()); S.relief=750;
   }
   else if(S.extraTaps>=3){
@@ -538,6 +686,7 @@ function update(dt){
     if(mi!==S.curMeasure){
       if(S.curMeasure>=0)evalMeasureEnd(S.curMeasure);
       S.extraTaps=0; S.curMeasure=mi;
+      if(S.chart[mi]&&S.chart[mi].kind==='break')S.relief=1100; // 区切りはにっこり（ほっと目）
     }
     // 「しーっ」の顔: がまんのコール中（＋わなヒント時はレスポンス中も）に本人が演じる
     {
@@ -551,8 +700,15 @@ function update(dt){
     for(let k=Math.max(0,mi-1);k<=Math.min(S.measures-1,mi);k++){
       for(const h of S.chart[k].hits){
         if(h.state==='wait'&&nowA()>h.time+okz){
-          h.state='miss';S.counts.miss++;S.combo=0;
-          feedback('miss','<span class="miss">ミス…</span>');
+          h.state='miss';
+          if(S.chart[k].kind==='quiz'){ // 撃ち逃した的は「にげられた」——こっそり消えていく
+            const it=S.chart[k].items.find(i=>i.beat===h.beat); // （見た目は練習も本番も同じ）
+            if(it)it.fadeAt=it.fadeAt||nowA();
+          }
+          if(S.chart[k].hint)continue; // れんしゅう: 挑まなかったことは罰しない（減点・コメントなし）
+          S.counts.miss++;S.combo=0;
+          feedback('miss','<span class="miss">'+
+            (S.chart[k].kind==='quiz'?'にげられた…！':'ミス…')+'</span>');
           thud(nowA()); S.vsy+=3;
         }
       }
@@ -564,30 +720,36 @@ function update(dt){
       // 祝いの規模は正解率で変わる——高いほど盛大に。ただし低くても必ずねぎらう
       const tot=S.counts.just+S.counts.ok+S.counts.miss+S.counts.trap;
       const rate=tot?S.counts.just/tot:0;
-      S.outroTier=rate>=0.85?2:rate>=0.6?1:0;
-      S.outroDur=[3.0,3.8,4.6][S.outroTier];
+      // ほんとにホントのパーフェクト: 全判定がジャスト（OKすら無い）＋おみとおしゼロ。
+      // やりこみ・粘りたい人のための最上段（tier3）
+      S.perfect=tot>0&&S.counts.just===tot&&S.counts.spam===0;
+      S.outroTier=S.perfect?3:rate>=0.85?2:rate>=0.6?1:0;
+      S.outroDur=[3.0,3.8,4.6,6.0][S.outroTier];
       S.outro=nowA(); S.outroFx=0;
       endFanfare(nowA()+0.05);
-      applause(nowA()+0.45,[22,34,50][S.outroTier],[0.085,0.105,0.125][S.outroTier],
-        [1.7,2.4,3.2][S.outroTier]);
-      if(S.outroTier===2)victoryArp(nowA()+0.7);
+      applause(nowA()+0.45,[22,34,50,72][S.outroTier],[0.085,0.105,0.125,0.14][S.outroTier],
+        [1.7,2.4,3.2,4.4][S.outroTier]);
+      if(S.outroTier>=2)victoryArp(nowA()+0.7);
+      if(S.outroTier===3){victoryArp(nowA()+1.12);victoryArp(nowA()+1.54);} // 勝ち鬨の3連呼
       feedback('ok','<span class="just">'+
         ['🎉 さいごまで やりきった！','🎉 いいリズムだった！',
-         '🏆 きみ、リズムの もちぬしだ！'][S.outroTier]+'</span>');
+         '🏆 きみ、リズムの もちぬしだ！','👑 ぜんぶ ジャスト……しんじられない！'][S.outroTier]+'</span>');
       S.fbUntil=nowA()+S.outroDur+0.5;
-      impact(S.outroTier===2?1.6:1.0); S.star=S.outroDur*1000;
+      impact([1.0,1.0,1.6,2.0][S.outroTier]); S.star=S.outroDur*1000;
       burst(0,0,50+S.outroTier*35); bloom(0.1+0.04*S.outroTier);
     }
     if(S.outro){
       const el=nowA()-S.outro;
-      const fxN=[3,5,9][S.outroTier];
-      if(S.outroFx<fxN&&el>0.5+S.outroFx*(S.outroTier===2?0.38:0.55)){ // 祝砲の追い打ち
+      const fxN=[3,5,9,16][S.outroTier];
+      if(S.outroFx<fxN&&el>0.5+S.outroFx*[0.55,0.55,0.38,0.27][S.outroTier]){ // 祝砲の追い打ち
         S.outroFx++;
         burst((Math.random()*2-1)*W*0.36,-H*0.5*(0.15+Math.random()*0.45),22+S.outroTier*8);
       }
-      // 紙吹雪の雨（正解率が高いほど濃い。画面ぜんたいで祝う）
-      if(S.outroTier>=1&&S.parts.length<460&&Math.random()<[0,0.4,0.8][S.outroTier]){
-        const COLS=['#FFD34D','#FFB84D','#8BE29B','#7FD7EA','#B9A8E8','#FF6F61'];
+      // 紙吹雪の雨（正解率が高いほど濃い。パーフェクトは金いろの雨）
+      if(S.outroTier>=1&&S.parts.length<460&&Math.random()<[0,0.4,0.8,1][S.outroTier]){
+        const COLS=S.outroTier===3
+          ?['#FFD34D','#FFE28A','#FFB84D','#FFF6D8','#FFD34D','#FFD34D']
+          :['#FFD34D','#FFB84D','#8BE29B','#7FD7EA','#B9A8E8','#FF6F61'];
         S.parts.push({x:(Math.random()-0.5)*W,y:-CY()-12,
           vx:(Math.random()-0.5)*1.6,vy:0.8+Math.random()*1.8,
           r:2.5+Math.random()*3.5,life:1600,hue:45,col:COLS[(Math.random()*COLS.length)|0]});
@@ -638,9 +800,13 @@ function update(dt){
       document.getElementById('phase').className='resp';}
     else if(m){
       if(m.kind==='break'){el.textContent='✨ それじゃあ、ほんばん いくよ！';el.className='resp';}
+      else if(m.kind==='qcall'){el.textContent=m.hint?'👀 みて！（みずいろ が こたえ）':'👀 みて！';el.className='call';}
+      else if(m.kind==='quiz'){el.textContent=m.hint?'🔥 みずいろを うちおとせ！':'🔥 うちおとせ！';el.className='resp';}
+      else if(m.kind==='odai'){el.textContent='👀 おだい！';el.className='call';}
       else if(m.kind==='countin'){
         const n=Math.max(1,Math.min(4,Math.floor(beatInMeasure(mi))+1));
-        el.textContent='🥁 カウント '+n+'…（まねなくて OK）';el.className='';}
+        if(P.stage==='quiz'){el.textContent='🥁 いくよ… '+n;el.className='call';}
+        else{el.textContent='🥁 カウント '+n+'…（まねなくて OK）';el.className='';}}
       else if(m.kind==='call'){
         if(m.section==='hon') el.textContent='💪 ほんばん！ きいて…';
         else el.textContent=(m.set&&m.set.gaman
@@ -714,8 +880,9 @@ function draw(){
         ring(h.time,S.mSpb[k],'#FFD34D','#4a3f73',false);
       }
       for(const d of (mk.decoys||[])){ // ダの的: 来るけど叩かない
-        // 既定は通常の的と同じ見た目（コールが予告。答えを色で書かない）
-        if(P.trapHint) ring(d.time,S.mSpb[k],'#FF7A6B','#5a3040',true);
+        // 既定は通常の的と同じ見た目（コールが予告。答えを色で書かない）。
+        // クイズではわなヒントも無効（答えはカードの分類＝頭の中にだけ）
+        if(P.trapHint&&mk.kind!=='quiz') ring(d.time,S.mSpb[k],'#FF7A6B','#5a3040',true);
         else ring(d.time,S.mSpb[k],'#FFD34D','#4a3f73',false);
       }
       if(mk.kind==='resp'&&mk.set&&mk.set.gaman){ // がまん: 4拍ぶんの誘惑リング
@@ -745,14 +912,143 @@ function draw(){
         ctx.beginPath();ctx.arc(Math.cos(ang)*r*1.6,Math.sin(ang)*r*1.6,glow?10:6,0,7);ctx.fill();
       });
     }
+    // うちこめビーム: カードは固定スロット（拍1〜4）。リズムはリングが運び、
+    // おだいに あてはまるカードだけをビームで撃ち落とす。本番は全カード平等＝答えは頭の中。
+    // れんしゅうだけは色ヒント＝補助輪（最初から答えが見えていて、外しても感覚で気付ける）
+    if(P.stage==='quiz'){
+      // フェーズ: odai=お題を読む（レーンは隠す）→ countin=いくよ？（レーンがフェードイン）→ 本番
+      const mNow=S.chart[Math.min(mi,S.measures-1)];
+      const phaseT=mNow.kind==='odai'?0
+        :mNow.kind==='countin'?Math.min(1,Math.max(0,beatInMeasure(mi)/4)):1;
+      const laneAl=phaseT;
+      const slotW=Math.min(W*0.22,130), cw=slotW*0.86, chh=Math.min(58,r*0.56);
+      // いま見せるペア: 現在の小節がカード持ちならそれ、なければ次（プレビュー=読む時間）
+      let qm=null;
+      for(let k=mi;k<=Math.min(S.measures-1,mi+1);k++){
+        if(S.chart[k].items){qm=S.chart[k];break;}
+      }
+      const binNow=beatInMeasure(Math.min(mi,S.measures-1));
+      // モードは射程（縦位置）で語る——うちこみビートの「点が出る=みて/出ない=こたえて」の代役。
+      // みて=高い位置で少し薄い（手が届かない）、こたえて=撃てる距離まで降りてくる。
+      // 降下はqcallの4拍目に半拍かけて滑り込む（「次は撃つ」がリズムで予告される）
+      const answerable=qm&&qm.kind==='quiz'&&qm===mNow;
+      let drop=answerable?1:0;
+      if(!answerable&&qm&&qm.kind==='qcall'&&qm===mNow&&
+         S.chart[mi+1]&&S.chart[mi+1].kind==='quiz')drop=Math.max(0,binNow-3);
+      const de=drop*drop*(3-2*drop);
+      const laneY=lerp(-Math.min(H*0.31,r*2.45),-Math.min(H*0.20,r*1.55),de);
+      if(laneAl>0.01&&qm){
+        // カードは固定位置の座卓（拍1〜4のスロット）。リズムはリングが運ぶ。
+        // 休符も「空白のカード」として明示する——正解でも不正解でもない空白は
+        // 消すのではなく枠で見せる（4拍の格子構造を常に読めるように）
+        for(let b=1;b<=4;b++){
+          const it=qm.items.find(i=>i.beat===b);
+          const x=(b-2.5)*slotW;
+          if(!it){ // 休符カード: 破線の空き枠。光らない・鳴らない・判定もない
+            ctx.globalAlpha=laneAl*0.5;
+            ctx.strokeStyle='#3d3260';ctx.lineWidth=2;
+            ctx.setLineDash([5,5]);
+            ctx.beginPath();ctx.roundRect(x-cw/2,laneY-chh/2,cw,chh,12);ctx.stroke();
+            ctx.setLineDash([]);
+            continue;
+          }
+          if(it.zapAt){ // 撃墜: インベーダー式にはじけて消える。跡は金の破線枠
+            const e=Math.min(1,(nowA()-it.zapAt)/0.45); // （休符の灰破線と描き分け＝倒した記録）
+            if(!it.zapFx){it.zapFx=1;burst(x,laneY,16);}
+            if(e>=1){
+              ctx.globalAlpha=laneAl*0.35;
+              ctx.strokeStyle='#FFD34D';ctx.lineWidth=2;
+              ctx.setLineDash([4,6]);
+              ctx.beginPath();ctx.roundRect(x-cw/2,laneY-chh/2,cw,chh,12);ctx.stroke();
+              ctx.setLineDash([]);
+              continue;
+            }
+            const sc2=1+0.35*e, cwz=cw*sc2, chz=chh*sc2;
+            ctx.globalAlpha=laneAl*(1-e);
+            ctx.fillStyle='#FFD34D';
+            ctx.beginPath();ctx.roundRect(x-cwz/2,laneY-chz/2,cwz,chz,12*sc2);ctx.fill();
+            ctx.strokeStyle='#fff';ctx.lineWidth=4;ctx.stroke();
+            ctx.fillStyle='#241d3a';
+            ctx.font='800 '+Math.round(chz*0.56)+'px "Hiragino Maru Gothic ProN","BIZ UDPGothic","Noto Sans JP",sans-serif';
+            ctx.textAlign='center';ctx.textBaseline='middle';
+            ctx.fillText(it.v,x,laneY);
+            continue;
+          }
+          if(it.fadeAt){ // 撃ち逃し=「にげられた」: こっそり消えていく（練習も本番も同じ見た目。
+            const e=Math.min(1,(nowA()-it.fadeAt)/0.6); // 練習の答えは水色のまま逃げる）
+            const hCol=qm.hint&&it.odd;
+            if(e>=1){ // 跡は休符と同じ灰の破線（金の破線=撃った記録とは描き分ける）
+              ctx.globalAlpha=laneAl*0.5;
+              ctx.strokeStyle='#3d3260';ctx.lineWidth=2;
+              ctx.setLineDash([5,5]);
+              ctx.beginPath();ctx.roundRect(x-cw/2,laneY-chh/2,cw,chh,12);ctx.stroke();
+              ctx.setLineDash([]);
+              continue;
+            }
+            const sc2=1-0.12*e, cwf=cw*sc2, chf=chh*sc2;
+            ctx.globalAlpha=laneAl*(1-e);
+            ctx.fillStyle=hCol?'#1e3348':'#241d3a';
+            ctx.beginPath();ctx.roundRect(x-cwf/2,laneY-chf/2,cwf,chf,12*sc2);ctx.fill();
+            ctx.strokeStyle=hCol?'#7FD7EA':'#4a3f73';ctx.lineWidth=3;ctx.stroke();
+            ctx.fillStyle=hCol?'#7FD7EA':'#EDE7F8';
+            ctx.font='800 '+Math.round(chf*0.56)+'px "Hiragino Maru Gothic ProN","BIZ UDPGothic","Noto Sans JP",sans-serif';
+            ctx.textAlign='center';ctx.textBaseline='middle';
+            ctx.fillText(it.v,x,laneY);
+            continue;
+          }
+          const isCur=(qm===mNow)&&Math.abs(binNow-(b-1))<0.5; // いまの拍のカード
+          const hintAns=qm.hint&&it.odd; // れんしゅう: 答えは最初から水色（手本の色。拍の金と混ぜない）
+          // カチッのフラッシュ: みて=水色（聞く合図の色）／こたえて=金（いま撃つ拍の色）
+          let fill='#241d3a',border=isCur?(answerable?'#FFD34D':'#7FD7EA'):'#4a3f73',
+              lw=isCur?5:3,dy=0,
+              al=laneAl*(answerable?1:0.88),sc=isCur?1.1:1,txt='#EDE7F8';
+          if(hintAns){fill='#1e3348';border='#7FD7EA';lw=Math.max(lw,4);txt='#7FD7EA';}
+          if(it.struckAt){ // あてはまらないのを撃ってしまった: 赤く震える
+            const e=Math.min(1,(nowA()-it.struckAt)/0.5);
+            border='#FF7A6B';lw=5;dy=Math.sin((nowA()-it.struckAt)*60)*(1-e)*4;
+          }
+          const cw2=cw*sc, ch2=chh*sc;
+          ctx.globalAlpha=al;
+          ctx.fillStyle=fill;
+          ctx.beginPath();ctx.roundRect(x-cw2/2,laneY-ch2/2+dy,cw2,ch2,12*sc);ctx.fill();
+          ctx.strokeStyle=border;ctx.lineWidth=lw*sc;ctx.stroke();
+          ctx.fillStyle=txt;
+          ctx.font='800 '+Math.round(ch2*0.56)+'px "Hiragino Maru Gothic ProN","BIZ UDPGothic","Noto Sans JP",sans-serif';
+          ctx.textAlign='center';ctx.textBaseline='middle';
+          ctx.fillText(it.v,x,laneY+dy);
+        }
+        ctx.globalAlpha=1;ctx.textBaseline='alphabetic';
+      }
+      // お題の常駐ピル（画面下部）: ふと混乱した時に、いつも「いてくれる」。
+      // 邪魔にならない存在感で（上部HUDは「みて！/こたえて！」の往復だけにする）
+      if(qm){
+        const lbl='👀 '+qm.inst.label;
+        const FQ2='"Hiragino Maru Gothic ProN","BIZ UDPGothic","Noto Sans JP",sans-serif';
+        let fs=Math.min(15,W*0.04);
+        ctx.font='700 '+fs+'px '+FQ2;
+        while(fs>10&&ctx.measureText(lbl).width>W*0.86){fs--;ctx.font='700 '+fs+'px '+FQ2;}
+        const tw=ctx.measureText(lbl).width, pw2=tw+30, ph2=fs+16;
+        const py2=H-CY()-34-ph2/2;
+        ctx.globalAlpha=0.9*phaseT;
+        ctx.fillStyle='rgba(36,29,58,0.92)';
+        ctx.strokeStyle='#3d3260';ctx.lineWidth=2;
+        ctx.beginPath();ctx.roundRect(-pw2/2,py2-ph2/2,pw2,ph2,ph2/2);ctx.fill();ctx.stroke();
+        ctx.fillStyle='#b9ace0';ctx.textAlign='center';ctx.textBaseline='middle';
+        ctx.fillText(lbl,0,py2+1);
+        ctx.globalAlpha=1;ctx.textBaseline='alphabetic';
+      }
+    }
   }
-  // 祝いの放射リング（かんぺきのみ・接近リングの逆＝解き放つ動き。体のうしろ）
-  if(S.outro&&S.outroTier===2&&S.scene==='play'){
+  // 祝いの放射リング（かんぺき以上・接近リングの逆＝解き放つ動き。体のうしろ。
+  // パーフェクトは本数も速さも増して白金がまざる）
+  if(S.outro&&S.outroTier>=2&&S.scene==='play'){
     const el=nowA()-S.outro, rMx=Math.min(W,H)*0.52;
-    for(let j=0;j<3;j++){
-      const ph=((el*0.55)+j/3)%1;
+    const n=S.outroTier===3?5:3, sp=S.outroTier===3?0.75:0.55;
+    for(let j=0;j<n;j++){
+      const ph=((el*sp)+j/n)%1;
       ctx.globalAlpha=(1-ph)*0.4;
-      ctx.strokeStyle='#FFD34D';ctx.lineWidth=2+5*(1-ph);
+      ctx.strokeStyle=(S.outroTier===3&&j%2)?'#FFF6D8':'#FFD34D';
+      ctx.lineWidth=2+5*(1-ph);
       ctx.beginPath();ctx.arc(0,0,r+(rMx-r)*ph,0,7);ctx.stroke();
     }
     ctx.globalAlpha=1;
@@ -797,22 +1093,66 @@ function draw(){
     ctx.beginPath();ctx.arc(mx,my,r*.19*(1-S.shush*0.6),Math.PI*0.15,Math.PI*0.85);ctx.stroke();
   }
   ctx.restore();
+  // お題パネル（ワリオ式モーダル・最前面）: おだい小節=具体的なお題を中央にどーん（読む4拍）→
+  // つづく「いくよ？」countinで上へスライドしつつフェード（レーン出現へバトン）。
+  // お題が変わるたび——れんしゅうの各ファミリーも本番の前半/後半も——同じ儀式を踏む
+  if(P.stage==='quiz'&&S.scene==='play'){
+    const miQ=measureNow();
+    const mQ=S.chart[Math.min(miQ,S.measures-1)];
+    const pT=mQ.kind==='odai'?0
+      :(mQ.kind==='countin'&&mQ.inst)?Math.min(1,Math.max(0,beatInMeasure(miQ)/4)):1;
+    if(pT<1){
+      const [main,subRaw]=mQ.inst.label.split('（');
+      const sub=subRaw?'（'+subRaw:(mQ.hint?'（みずいろ が こたえ）':'');
+      const e=pT*pT*(3-2*pT); // smoothstep
+      const pw=Math.min(W*0.88,520), ph=Math.max(120,r*1.35);
+      const py=lerp(-ph*0.52, H-CY()-ph-70, e); // 中央→下部の常駐ピルへ受け渡し
+      ctx.save();
+      ctx.globalAlpha=Math.pow(1-e,1.6);
+      ctx.fillStyle='rgba(21,18,34,0.94)';
+      ctx.strokeStyle='#7FD7EA';ctx.lineWidth=3;
+      ctx.beginPath();ctx.roundRect(-pw/2,py,pw,ph,18);ctx.fill();ctx.stroke();
+      ctx.textAlign='center';ctx.textBaseline='middle';
+      const FQ='"Hiragino Maru Gothic ProN","BIZ UDPGothic","Noto Sans JP",sans-serif';
+      const fit=(txt,base,w)=>{ // はみ出す場合は収まるまで縮める
+        let fs=base;ctx.font='800 '+fs+'px '+FQ;
+        while(fs>11&&ctx.measureText(txt).width>w){fs--;ctx.font='800 '+fs+'px '+FQ;}
+        return fs;};
+      ctx.fillStyle='#7FD7EA';
+      ctx.font='800 '+Math.round(Math.min(W*0.05,24))+'px '+FQ;
+      ctx.fillText(mQ.hint?'👀 おだい（れんしゅう）':'👀 おだい',0,py+ph*0.2);
+      ctx.fillStyle='#EDE7F8';
+      fit(main,Math.round(Math.min(W*0.075,34)),pw-36);
+      ctx.fillText(main,0,py+ph*0.52);
+      if(sub){ctx.fillStyle='#9d90c4';
+        fit(sub,Math.round(Math.min(W*0.045,20)),pw-36);
+        ctx.fillText(sub,0,py+ph*0.8);}
+      ctx.restore();
+    }
+  }
   // でっかい褒め（画面ぜんたいで労う。ポップイン→ゆらゆら）
   if(S.outro&&S.scene==='play'){
     const el=nowA()-S.outro;
     const pop=Math.min(1,el/0.35), ease=1-Math.pow(1-pop,3);
-    const word=['おつかれさま！','すごい！','かんぺき！！'][S.outroTier];
-    const fs=Math.min(W,H)*[0.085,0.105,0.13][S.outroTier];
+    const word=['おつかれさま！','すごい！','かんぺき！！','パーフェクト！！！'][S.outroTier];
+    const FB='"Hiragino Maru Gothic ProN","BIZ UDPGothic","Noto Sans JP",sans-serif';
+    let fsz=Math.round(Math.min(W,H)*[0.085,0.105,0.13,0.145][S.outroTier]);
     ctx.save();
     ctx.translate(0,-Math.min(H*0.27,r*2.6));
     ctx.rotate(Math.sin(el*2.6)*0.035*(S.outroTier?1:0.4));
     ctx.scale(0.5+0.5*ease,0.5+0.5*ease);
-    ctx.font='800 '+Math.round(fs)+'px "Hiragino Maru Gothic ProN","BIZ UDPGothic","Noto Sans JP",sans-serif';
+    ctx.font='800 '+fsz+'px '+FB;
+    while(fsz>20&&ctx.measureText(word).width>W*0.92){fsz--;ctx.font='800 '+fsz+'px '+FB;}
     ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.globalAlpha=pop;
-    ctx.shadowColor='#FFD34D';ctx.shadowBlur=S.outroTier===2?30:12;
-    ctx.fillStyle=S.outroTier===2?'#FFD34D':'#EDE7F8';
+    ctx.shadowColor='#FFD34D';ctx.shadowBlur=[12,12,30,44][S.outroTier];
+    ctx.fillStyle=S.outroTier>=2?'#FFD34D':'#EDE7F8';
     ctx.fillText(word,0,0);
+    if(S.outroTier===3){ // 王冠がふわり（全ジャストの証）
+      ctx.font=Math.round(fsz*0.9)+'px sans-serif';
+      ctx.shadowBlur=0;
+      ctx.fillText('👑',0,-fsz*1.05-Math.sin(el*3.1)*fsz*0.08);
+    }
     ctx.restore();
   }
   ctx.restore();
@@ -832,10 +1172,42 @@ function starEye(x,y,r){ctx.save();ctx.translate(x,y);ctx.fillStyle='#FF6F61';
     ctx.lineTo(Math.cos(a)*rr,Math.sin(a)*rr);}ctx.closePath();ctx.fill();ctx.restore();}
 
 /* ---------- UI配線 ---------- */
-document.querySelectorAll('.bpms button').forEach(b=>{
+document.querySelectorAll('.bpms button[data-bpm]').forEach(b=>{
   b.addEventListener('click',()=>{P.bpm=+b.dataset.bpm;
-    document.querySelectorAll('.bpms button').forEach(x=>x.classList.remove('on'));
+    document.querySelectorAll('.bpms button[data-bpm]').forEach(x=>x.classList.remove('on'));
     b.classList.add('on');});
+});
+function syncStageUI(){ // 看板の顔: ビート=🥁 ビーム=🛸（名前が似てるぶん、絵で見分ける）
+  const em=P.stage==='quiz'?'🛸':'🥁';
+  document.getElementById('stagemoji').textContent=em;
+  document.getElementById('brandmoji').textContent=em;
+  document.querySelectorAll('.stages button').forEach(x=>
+    x.classList.toggle('on',x.dataset.stage===P.stage));
+}
+document.querySelectorAll('.stages button').forEach(b=>{
+  b.addEventListener('click',()=>{P.stage=b.dataset.stage;syncStageUI();});
+});
+syncStageUI(); // ?stage= 起動でも看板と選択状態を揃える
+// タイトル/リザルト画面もジャム席（音が出るかの確認と手触りの試遊を兼ねる）
+document.getElementById('screen').addEventListener('pointerdown',(e)=>{
+  if(e.target.closest('button,input,label'))return;
+  ac();
+  const f=180+260*Math.min(1,Math.max(0,e.clientX/window.innerWidth));
+  tone(nowA(),f,.08,.13,'triangle',-40);
+  tone(nowA(),f*2.6,.045,.07,'sine',-140); // ジャム席と同じ「じぶんの太鼓」の声
+  for(let i=0;i<6;i++){ // タップした場所に本番ジャム席と同じ粒（薄く・ひかえめ）
+    const p=document.createElement('div');p.className='jamp';
+    const a=Math.random()*Math.PI*2, v=22+Math.random()*44, sz=3.5+Math.random()*4;
+    p.style.left=(e.clientX-sz/2)+'px'; p.style.top=(e.clientY-sz/2)+'px';
+    p.style.width=sz+'px'; p.style.height=sz+'px';
+    document.body.appendChild(p);
+    p.animate([{transform:'translate(0,0)',opacity:.65},
+      {transform:'translate('+Math.cos(a)*v+'px,'+(Math.sin(a)*v+26)+'px)',opacity:0}],
+      {duration:420+Math.random()*200,easing:'cubic-bezier(.2,.6,.4,1)'})
+      .onfinish=()=>p.remove();
+  }
+  const h=document.querySelector('#screen h1');
+  h.classList.remove('pop'); void h.offsetWidth; h.classList.add('pop');
 });
 const thEl=document.getElementById('traphint');
 thEl.checked=P.trapHint;
