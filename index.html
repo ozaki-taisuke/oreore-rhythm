@@ -140,7 +140,7 @@
   </div>
   <div id="result"></div>
   <button class="go" id="go">はじめる！</button>
-  <div class="ver">オレオレリズム v0.2.0（うちこみビート ＋ うちこめビーム）</div>
+  <div class="ver">オレオレリズム v0.2.1（うちこみビート ＋ うちこめビーム）</div>
 </div>
 
 <script>
@@ -253,7 +253,15 @@ const lerp=(a,b,t)=>a+(b-a)*t;
 /* ---------- audio: 合成音＋先読みスケジューラ ---------- */
 let AC=null;
 function ac(){ if(!AC){AC=new (window.AudioContext||window.webkitAudioContext)();}
-  if(AC.state==='suspended')AC.resume(); return AC; }
+  // 画面を離れている間は鳴らし直さない（アプリ内ブラウザ対策。スケジューラが
+  // 40msごとにac()を呼ぶので、ここで塞がないとsuspendしても即resumeしてしまう）
+  if(AC.state==='suspended'&&!document.hidden)AC.resume(); return AC; }
+// アプリ内ブラウザ等で画面を閉じたら音を止める。currentTimeごと凍るので、
+// 復帰時は同じ時計から続き（曲・判定のズレは出ない）。閉じ切り(pagehide)にも備える
+function suspendAudio(){ if(AC&&AC.state==='running')AC.suspend(); }
+function resumeAudio(){ if(AC&&AC.state==='suspended'&&!document.hidden)AC.resume(); }
+document.addEventListener('visibilitychange',()=>{document.hidden?suspendAudio():resumeAudio();});
+window.addEventListener('pagehide',suspendAudio);
 function tone(t,f,dur,peak,type='sine',glide=0){
   const a=ac(),o=a.createOscillator(),g=a.createGain();
   o.type=type; o.frequency.setValueAtTime(f,t);
@@ -310,7 +318,7 @@ const S={
   perfect:false,        // 全判定ジャスト＋おみとおしゼロ（tier3。やりこみの頂）
 };
 const NPT=14;
-window.__R={P,S,judgeAt:null}; // テスト用フック
+window.__R={P,S,judgeAt:null,acState:()=>AC?AC.state:null}; // テスト用フック
 
 /* ---------- 譜面生成 ---------- */
 function buildQuizChart(){
