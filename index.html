@@ -8,7 +8,7 @@
 <meta property="og:description" content="きいて→こたえて のコール&レスポンス リズムゲーム。リズム×クイズ×たしざんの3ステージ。ブラウザでひらくだけ・つうしんなし・むりょう。">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://ozaki-taisuke.github.io/oreore-rhythm/">
-<meta property="og:image" content="https://ozaki-taisuke.github.io/oreore-rhythm/ogp.png?h=6ddcc527">
+<meta property="og:image" content="https://ozaki-taisuke.github.io/oreore-rhythm/ogp.png?h=cdefe9b3">
 <meta name="twitter:card" content="summary_large_image">
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
@@ -128,7 +128,7 @@
   <div class="bpms stages">
     <button data-stage="beat" class="on">うちこみビート<small>きいて→こたえて</small></button>
     <button data-stage="quiz">うちこめビーム<small>あてはまる カードを うちおとせ</small></button>
-    <button data-stage="dice">サイコロビート<small>ごうけいが ひかったら おせ</small></button>
+    <button data-stage="dice">サイコロプラス<small>ごうけいが ひかったら おせ</small></button>
   </div>
   <div class="bpms">
     <button data-bpm="110">やさしい<small>110</small></button>
@@ -142,7 +142,7 @@
   </div>
   <div id="result"></div>
   <button class="go" id="go">はじめる！</button>
-  <div class="ver">オレオレリズム v0.3.2（うちこみビート ＋ うちこめビーム ＋ サイコロビート）</div>
+  <div class="ver">オレオレリズム v0.3.3（うちこみビート ＋ うちこめビーム ＋ サイコロプラス）</div>
 </div>
 
 <script>
@@ -178,7 +178,7 @@ const QUIZ_Q=()=>qs.get('q')?+qs.get('q'):8;
 const TUT_PAIRS=qs.get('pairs')?+qs.get('pairs'):2;   // れんしゅう: セットあたりのペア数
 // ほんばんのペア数はbuildChart時に決める（とばす時は長め。熱狂してきた頃に終わらせない）
 const honPairs=()=>qs.get('honban')?+qs.get('honban'):(P.skipTut?16:12);
-// サイコロビート: 本番ラウンド数と練習ラウンド数。1ラウンド=3小節（spin＋回答窓2小節）
+// サイコロプラス: 本番ラウンド数と練習ラウンド数。1ラウンド=3小節（spin＋回答窓2小節）
 const DICE_N=()=>qs.get('dn')?+qs.get('dn'):8;
 const DICE_TUT=qs.get('dtut')?+qs.get('dtut'):2;
 const DICE_ND=3, DICE_WIN=8; // サイコロ3個（4個は認知負荷で崩壊・実測済）・回答窓8拍
@@ -242,7 +242,7 @@ const FAMILIES=[
 let rngState=(+qs.get('seed')||((Math.random()*1e9)|0))>>>0;
 function rng(){rngState=(rngState*1664525+1013904223)>>>0;return rngState/4294967296;}
 
-/* ---------- サイコロビート: ラウンド鋳造（seed決定論。出目も2たくも狙えない） ---------- */
+/* ---------- サイコロプラス: ラウンド鋳造（seed決定論。出目も2たくも狙えない） ---------- */
 const rollFace=()=>1+Math.floor(rng()*6);
 function mintDiceRound(){
   const hand=Array.from({length:DICE_ND},rollFace);
@@ -269,7 +269,7 @@ function resize(){
 window.addEventListener('resize',resize); resize();
 function checkResize(){ if(Math.abs(cv.clientWidth-W)>1||Math.abs(cv.clientHeight-H)>1) resize(); }
 const CY=()=>H*0.46, blobR=()=>Math.min(110,Math.min(W,H)*0.17);
-// サイコロビートだけ、まとを下へ（サイコロ・2たく・とけい弧と役割の位置が被らないように）
+// サイコロプラスだけ、まとを下へ（サイコロ・2たく・とけい弧と役割の位置が被らないように）
 const CHAR_DY=()=>P.stage==='dice'?Math.min(H*0.07,blobR()*0.55):0;
 const lerp=(a,b,t)=>a+(b-a)*t;
 
@@ -339,9 +339,9 @@ const S={
   chart:[],             // 小節ごと {kind:'countin'|'call'|'resp', set, pat, hits:[{beat,time,state}]}
   schedM:0, schedE:0,   // スケジューラ位置（小節・小節内8分）
   measures:0,
-  counts:{just:0,ok:0,miss:0,spam:0,trap:0,taps:0,slip:0,fast:0}, // slip/fast=サイコロビート専用（ズレ/ソッコー）
+  counts:{just:0,ok:0,miss:0,spam:0,trap:0,taps:0,slip:0,fast:0}, // slip/fast=サイコロプラス専用（ズレ/ソッコー）
   combo:0,best:0,
-  cere:null,            // サイコロビート: カウントアップ儀式（正解の暗算なぞり直し）
+  cere:null,            // サイコロプラス: カウントアップ儀式（正解の暗算なぞり直し）
   tapsThisMeasure:0, extraTaps:0, spamMeasure:false, curMeasure:-1,
   fb:null, fbUntil:0,   // 直近判定表示
   // キャラ物理（素振り実験機から移植・簡約）
@@ -414,7 +414,7 @@ function buildQuizChart(){
   });
 }
 function buildDiceChart(){
-  // サイコロビート: 1ラウンド=3小節。spin小節=拍0〜2でサイコロ3つが順停止
+  // サイコロプラス: 1ラウンド=3小節。spin小節=拍0〜2でサイコロ3つが順停止
   // （とまるそばから足せる）・拍3で2たく登場。go×2小節=回答窓8拍、2たくが
   // 1拍ごとに交互にひかる（左=拍0,2,4,6／右=拍1,3,5,7）。じぶんの答えが
   // ひかった瞬間に まとをタップ＝「いつ押すか」が「どっちを答えるか」。
@@ -549,7 +549,7 @@ function scheduler(){
       // qcall: カードの拍で中立の「カチッ」（全カード同じ音。耳はリズムだけ運ぶ、
       // あてはまるかどうかは音に書かない）
       if(m.kind==='qcall'&&m.items&&m.items.some(i=>i.beat===bin+1)) snapClick(t);
-      // サイコロビート: spin=1拍1個の着地カチッ＋カラカラ→ピタッ→2たく登場。
+      // サイコロプラス: spin=1拍1個の着地カチッ＋カラカラ→ピタッ→2たく登場。
       // go=ひかる札のガイド音（左=低・右=高）
       if(m.kind==='spin'){
         if(S.schedE%2===0&&bin<DICE_ND)snapClick(t);
@@ -606,7 +606,7 @@ function endGame(){
 }
 
 /* ---------- 判定（すべてaudio時刻で） ---------- */
-/* サイコロビート: 押した「拍」がそのまま答え（左=拍0,2,4,6／右=拍1,3,5,7）。
+/* サイコロプラス: 押した「拍」がそのまま答え（左=拍0,2,4,6／右=拍1,3,5,7）。
    拍の帰属は「いま/さっき見た光」寄り（floor）——遅れた指はさっき見た光のもの。
    先読みだけはジャスト窓ぶん次の拍を取れる（「左で押したのに右と記録」の誤認を根絶）。
    OK帯を超えた遅れ=ズレ。回答にならずラウンド続行（ミスは記録するが没収しない） */
@@ -834,7 +834,7 @@ function update(dt){
       if(S.curMeasure>=0)evalMeasureEnd(S.curMeasure);
       S.extraTaps=0; S.curMeasure=mi;
       if(S.chart[mi]&&S.chart[mi].kind==='break')S.relief=1100; // 区切りはにっこり（ほっと目）
-      // サイコロビート: 新ラウンドのspinが始まったら前の儀式は畳む
+      // サイコロプラス: 新ラウンドのspinが始まったら前の儀式は畳む
       // （れんしゅうの補助輪の式と、前ラウンドの儀式の式を同じ場所に重ねない）
       if(P.stage==='dice'&&S.chart[mi]&&S.chart[mi].kind==='spin')S.cere=null;
     }
@@ -863,7 +863,7 @@ function update(dt){
         }
       }
     }
-    // サイコロビート: 窓の時間切れ＝にげられた（れんしゅうは静かに。挑まなかったことは罰しない）
+    // サイコロプラス: 窓の時間切れ＝にげられた（れんしゅうは静かに。挑まなかったことは罰しない）
     if(P.stage==='dice'){
       for(let k=Math.max(0,mi-2);k<=Math.min(S.measures-1,mi);k++){
         const dm=S.chart[k];
@@ -1210,7 +1210,7 @@ function draw(){
         ctx.globalAlpha=1;ctx.textBaseline='alphabetic';
       }
     }
-    // サイコロビート: サイコロは上段（みての高さ）・2たくはその下（こたえての高さ）。
+    // サイコロプラス: サイコロは上段（みての高さ）・2たくはその下（こたえての高さ）。
     // まと（まんなかの子）がボタン——ひかった瞬間に押す＝押す拍が答え。
     // 曲おわり（outro）は盤面を引っ込めて、でっかい褒めに舞台を明け渡す
     // （白いサイコロの上に白金の褒め文字が乗ると読めない）
@@ -1225,9 +1225,18 @@ function draw(){
       }
       const FQ4='"Hiragino Maru Gothic ProN","BIZ UDPGothic","Noto Sans JP",sans-serif';
       // 縦の間取り: サイコロ（上段）→ 足し算のことば（中段）→ 2たく（下段）→ まと。
-      // 小さい画面では r 基準が勝つので、サイコロは高めに逃がして文字の居場所を作る
-      const diceY=-Math.min(H*0.33,r*2.75), chYd=-Math.min(H*0.17,r*1.35);
-      const dw=Math.min(W*0.18,80);
+      // HUD（指示文）は固定px・まとはH比なので、H比だけで置くと縦の広いPCで
+      // サイコロがHUD帯に潜り込む。使える帯（HUD下端〜とけい弧の上）を実測して
+      // その中に収める＝どの解像度でも役割どうしが重ならない
+      const HUDB=150; // 指示文＋判定＋コンボの下端（CSS実寸＋余白）
+      const dwBase=Math.min(W*0.18,80), chhBase=Math.min(64,r*0.6), GAPQ=46;
+      const topLim=HUDB-CY(), botLim=CHAR_DY()-r*1.30-10;
+      const availV=botLim-topLim, needV=dwBase+GAPQ+chhBase;
+      const kV=Math.max(0.6,Math.min(1,availV/needV)); // 帯が足りなければ縮める（下限つき）
+      const dw=dwBase*kV, chh=chhBase*kV, gapQ=GAPQ*kV;
+      const topV=topLim+Math.max(0,availV-(dw+gapQ+chh))/2; // 余れば帯の中央へ
+      const diceY=topV+dw/2, chYd=topV+dw+gapQ+chh/2;
+      const midY=topV+dw+gapQ/2; // 足し算のことばの居場所（サイコロと2たくのあいだ）
       const spbD=S.mSpb[Math.min(mi,S.measures-1)];
       for(let b=1;b<=DICE_ND;b++){ // サイコロ3つ（spinで1拍1個着地・儀式中は順に跳ねる）
         const x=(b-2)*(dw+12);
@@ -1250,7 +1259,7 @@ function draw(){
         const goT=phase==='go'?rm.w0:S.mStart[mi+1];
         const spbW=phase==='go'?rm.spbW:spbD;
         const popT=goT-spbW;
-        const chw=Math.min(W*0.3,140), chh=Math.min(64,r*0.6);
+        const chw=Math.min(W*0.3,140); // 高さchhは上の間取りで決めた値を使う
         const popE=Math.min(1,Math.max(0,(nowA()-popT)/0.18));
         const tb=(nowA()-goT)/spbW;
         const openW=phase==='go'&&!rm.resolved&&tb<=DICE_WIN;
@@ -1302,8 +1311,6 @@ function draw(){
           ctx.stroke();
         }
       }
-      // 足し算のことばの居場所（サイコロの下端と2たくの上端のあいだ）
-      const midY=(diceY+dw/2+(chYd-Math.min(64,r*0.6)/2))/2;
       // れんしゅうの補助輪: spin中、とまった目の足し算を途中経過で見せる
       if(rm&&rm.hint&&phase==='spin'&&binNow<3.6){
         const n2=Math.min(DICE_ND,Math.floor(binNow)+1);
@@ -1465,7 +1472,7 @@ function draw(){
 function starEye(x,y,r){ctx.save();ctx.translate(x,y);ctx.fillStyle='#FF6F61';
   ctx.beginPath();for(let i=0;i<10;i++){const a=Math.PI*i/5-Math.PI/2,rr=i%2?r*.45:r;
     ctx.lineTo(Math.cos(a)*rr,Math.sin(a)*rr);}ctx.closePath();ctx.fill();ctx.restore();}
-/* サイコロの絵（サイコロビート専用） */
+/* サイコロの絵（サイコロプラス専用） */
 const DPIPS={1:[[0,0]],2:[[-1,-1],[1,1]],3:[[-1,-1],[0,0],[1,1]],
   4:[[-1,-1],[1,-1],[-1,1],[1,1]],5:[[-1,-1],[1,-1],[0,0],[-1,1],[1,1]],
   6:[[-1,-1],[1,-1],[-1,0],[1,0],[-1,1],[1,1]]};
