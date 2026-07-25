@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>オレオレリズム 🥁</title>
 <meta property="og:title" content="オレオレリズム 🥁">
-<meta property="og:description" content="きいて→こたえて のコール&レスポンス リズムゲーム。ひくい「ダ」は まねしない。ブラウザでひらくだけ・つうしんなし・むりょう。">
+<meta property="og:description" content="きいて→こたえて のコール&レスポンス リズムゲーム。リズム×クイズ×たしざんの3ステージ。ブラウザでひらくだけ・つうしんなし・むりょう。">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://ozaki-taisuke.github.io/oreore-rhythm/">
 <meta property="og:image" content="https://ozaki-taisuke.github.io/oreore-rhythm/ogp.png?h=6ddcc527">
@@ -57,6 +57,7 @@
   .bpms button{flex:1;padding:10px 2px;line-height:1.5}
   .bpms button small{display:block;font-size:17px;font-variant-numeric:tabular-nums}
   .bpms button.on{background:#FFB84D;border-color:#FFB84D;color:#241d3a}
+  .stages button{font-size:13px;padding:10px 2px} /* 3枚並びでも名前を折り返さない */
   .stages button small{font-size:11px;font-weight:500;opacity:.75}
   .stages button.on{background:#7FD7EA;border-color:#7FD7EA}
   #screen .go{background:#FF6F61;border-color:#FF6F61;padding:14px 42px;font-size:18px}
@@ -127,6 +128,7 @@
   <div class="bpms stages">
     <button data-stage="beat" class="on">うちこみビート<small>きいて→こたえて</small></button>
     <button data-stage="quiz">うちこめビーム<small>あてはまる カードを うちおとせ</small></button>
+    <button data-stage="dice">サイコロビート<small>ごうけいが ひかったら おせ</small></button>
   </div>
   <div class="bpms">
     <button data-bpm="110">やさしい<small>110</small></button>
@@ -140,7 +142,7 @@
   </div>
   <div id="result"></div>
   <button class="go" id="go">はじめる！</button>
-  <div class="ver">オレオレリズム v0.2.1（うちこみビート ＋ うちこめビーム）</div>
+  <div class="ver">オレオレリズム v0.3.0（うちこみビート ＋ うちこめビーム ＋ サイコロビート）</div>
 </div>
 
 <script>
@@ -176,6 +178,10 @@ const QUIZ_Q=()=>qs.get('q')?+qs.get('q'):8;
 const TUT_PAIRS=qs.get('pairs')?+qs.get('pairs'):2;   // れんしゅう: セットあたりのペア数
 // ほんばんのペア数はbuildChart時に決める（とばす時は長め。熱狂してきた頃に終わらせない）
 const honPairs=()=>qs.get('honban')?+qs.get('honban'):(P.skipTut?16:12);
+// サイコロビート: 本番ラウンド数と練習ラウンド数。1ラウンド=3小節（spin＋回答窓2小節）
+const DICE_N=()=>qs.get('dn')?+qs.get('dn'):8;
+const DICE_TUT=qs.get('dtut')?+qs.get('dtut'):2;
+const DICE_ND=3, DICE_WIN=8; // サイコロ3個（4個は認知負荷で崩壊・実測済）・回答窓8拍
 
 /* ---------- 譜面: 小節内の拍位置（1拍目=1）。コール小節→レスポンス小節の対 ---------- */
 const POOL=[
@@ -236,6 +242,21 @@ const FAMILIES=[
 let rngState=(+qs.get('seed')||((Math.random()*1e9)|0))>>>0;
 function rng(){rngState=(rngState*1664525+1013904223)>>>0;return rngState/4294967296;}
 
+/* ---------- サイコロビート: ラウンド鋳造（seed決定論。出目も2たくも狙えない） ---------- */
+const rollFace=()=>1+Math.floor(rng()*6);
+function mintDiceRound(){
+  const hand=Array.from({length:DICE_ND},rollFace);
+  const sum=hand.reduce((a,b)=>a+b,0);
+  // 誤答: ±1〜±3（暗算の踏み外しどころ）。やさしい(110)は±1を抜く。範囲3..18・重複なし
+  const offs=P.bpm<=110?[-3,-2,2,3]:[-3,-2,-1,1,2,3];
+  for(let i=offs.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[offs[i],offs[j]]=[offs[j],offs[i]];}
+  const set=[sum];
+  for(const o of offs){if(set.length>=2)break;
+    const v=sum+o;if(v>=3&&v<=18&&!set.includes(v))set.push(v);}
+  for(let i=set.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[set[i],set[j]]=[set[j],set[i]];}
+  return {hand,sum,choices:set,correct:set.indexOf(sum)};
+}
+
 /* ---------- canvas（素振り実験機で確立した作法） ---------- */
 const cv=document.getElementById('c'), ctx=cv.getContext('2d');
 let W=0,H=0,DPR=1;
@@ -283,6 +304,18 @@ const dingJ=t=>{tone(t,523,.16,.2);tone(t,784,.16,.14);tone(t,1046,.2,.1);} // �
 const dingO=t=>tone(t,440,.09,.14);
 const thud =t=>tone(t,120,.16,.25,'sine',-70);
 const BASSLINE=[110,110,82.4,98]; // A A E G（小節ごと）
+function clatter(t,g){ // サイコロのカラカラ（回転中の声。1音色=1意味）
+  const a=ac(),b=a.createBuffer(1,(a.sampleRate*0.03)|0,a.sampleRate),d=b.getChannelData(0);
+  for(let j=0;j<d.length;j++)d[j]=(Math.random()*2-1)*Math.exp(-j/d.length*9);
+  const s=a.createBufferSource(),gn=a.createGain(),bp=a.createBiquadFilter();
+  bp.type='bandpass';bp.frequency.value=2000+Math.random()*1600;
+  gn.gain.value=g||0.05;s.buffer=b;s.connect(bp).connect(gn).connect(a.destination);s.start(t);}
+function diceSnapAll(t){ // ぜんぶ確定の「ピタッ」（最後のサイコロの着地）
+  clatter(t,0.13);tone(t,1900,.03,.09,'square');tone(t+0.02,950,.05,.06,'square');}
+const guideL=t=>tone(t,523,.05,.07); // ひかる札のガイド音: 左=低
+const guideR=t=>tone(t,659,.05,.07); //                     右=高（目をつぶっても交互がわかる）
+function sokkoSpark(t){tone(t,1568,.07,.12);tone(t+0.07,2093,.1,.12);} // ソッコーのきらめき
+function sumChime(t){tone(t,1046,.3,.2);tone(t,784,.3,.12);tone(t,1318,.35,.09);} // 合計チャイム
 function shush(t){ // がまんの予告音（やわらかい「フゥー↓」。破裂音NG・驚かせない）
   const a=ac(),len=0.38;
   const o=a.createOscillator(),g=a.createGain();
@@ -303,8 +336,9 @@ const S={
   chart:[],             // 小節ごと {kind:'countin'|'call'|'resp', set, pat, hits:[{beat,time,state}]}
   schedM:0, schedE:0,   // スケジューラ位置（小節・小節内8分）
   measures:0,
-  counts:{just:0,ok:0,miss:0,spam:0,trap:0,taps:0},
+  counts:{just:0,ok:0,miss:0,spam:0,trap:0,taps:0,slip:0,fast:0}, // slip/fast=サイコロビート専用（ズレ/ソッコー）
   combo:0,best:0,
+  cere:null,            // サイコロビート: カウントアップ儀式（正解の暗算なぞり直し）
   tapsThisMeasure:0, extraTaps:0, spamMeasure:false, curMeasure:-1,
   fb:null, fbUntil:0,   // 直近判定表示
   // キャラ物理（素振り実験機から移植・簡約）
@@ -376,8 +410,29 @@ function buildQuizChart(){
     for(let q=0;q<half;q++)pushPair('hon',hi*half+q,false,inst);
   });
 }
+function buildDiceChart(){
+  // サイコロビート: 1ラウンド=3小節。spin小節=拍0〜2でサイコロ3つが順停止
+  // （とまるそばから足せる）・拍3で2たく登場。go×2小節=回答窓8拍、2たくが
+  // 1拍ごとに交互にひかる（左=拍0,2,4,6／右=拍1,3,5,7）。じぶんの答えが
+  // ひかった瞬間に まとをタップ＝「いつ押すか」が「どっちを答えるか」。
+  // れんしゅう=水色ヒント（答えの札）＋足し算の途中経過を表示する補助輪
+  S.chart=[{kind:'countin',pat:[1,2,3,4],hits:[]}];
+  const pushRound=(section,honPair,hint)=>{
+    const rd=mintDiceRound();
+    S.chart.push({kind:'spin',...rd,section,honPair,hint,pat:[],hits:[]});
+    const go={kind:'go',...rd,section,honPair,hint,resolved:false,pat:[],hits:[]};
+    S.chart.push(go);S.chart.push(go); // 窓2小節はラウンドを共有
+  };
+  if(!P.skipTut){
+    for(let i=0;i<DICE_TUT;i++)pushRound('tut',0,true);
+    S.chart.push({kind:'break',hits:[]});
+    S.chart.push({kind:'countin',pat:[1,2,3,4],hits:[]});
+  }
+  for(let q=0;q<DICE_N();q++)pushRound('hon',q,false);
+}
 function buildChart(){
   if(P.stage==='quiz'){buildQuizChart();}
+  else if(P.stage==='dice'){buildDiceChart();}
   else buildBeatChart();
   S.measures=S.chart.length;
   // テンポマップ: 小節ごとにBPMを割当（かそく: ほんばん/問ごとに+6、最大+48）
@@ -392,6 +447,7 @@ function buildChart(){
   });
   // レスポンス/クイズ小節の期待ヒット・ダにaudio絶対時刻を張る
   S.chart.forEach((m,mi)=>{
+    if(m.kind==='go'&&m.w0===undefined){m.w0=S.mStart[mi];m.spbW=S.mSpb[mi];} // 窓のあたま（共有ラウンドの初出のみ）
     if(m.kind!=='resp'&&m.kind!=='quiz')return;
     m.hits=m.pat.map(b=>({beat:b,time:S.mStart[mi]+(b-1)*S.mSpb[mi],state:'wait'}));
     m.decoys=(m.set&&m.set.decoys||[]).map(b=>({beat:b,time:S.mStart[mi]+(b-1)*S.mSpb[mi]}));
@@ -490,6 +546,15 @@ function scheduler(){
       // qcall: カードの拍で中立の「カチッ」（全カード同じ音。耳はリズムだけ運ぶ、
       // あてはまるかどうかは音に書かない）
       if(m.kind==='qcall'&&m.items&&m.items.some(i=>i.beat===bin+1)) snapClick(t);
+      // サイコロビート: spin=1拍1個の着地カチッ＋カラカラ→ピタッ→2たく登場。
+      // go=ひかる札のガイド音（左=低・右=高）
+      if(m.kind==='spin'){
+        if(S.schedE%2===0&&bin<DICE_ND)snapClick(t);
+        if(S.schedE===4)diceSnapAll(t+0.001);
+        if(bin<DICE_ND-0.5)clatter(t+0.06,0.035);
+        if(S.schedE===6){tone(t,784,.06,.12);tone(t+0.09,1046,.08,.12);}
+      }
+      if(m.kind==='go'&&S.schedE%2===0)(bin%2===0?guideL:guideR)(t);
     }
     S.schedE++; if(S.schedE>=8){S.schedE=0;S.schedM++;}
   }
@@ -511,8 +576,9 @@ function startGame(){
   S.scene='play';
   S.t0=a.currentTime+0.8;
   S.schedM=0; S.schedE=0; S._mi=0;
-  S.counts={just:0,ok:0,miss:0,spam:0,trap:0,taps:0};
+  S.counts={just:0,ok:0,miss:0,spam:0,trap:0,taps:0,slip:0,fast:0};
   S.combo=0;S.best=0;S.curMeasure=-1;S.fb=null;S.outro=0;S.outroFx=0;S.shush=0;S.perfect=false;
+  S.cere=null;
   document.getElementById('judge').innerHTML=''; // 前プレイの判定（+XXms等）を持ち越さない
   buildChart();
   document.getElementById('screen').classList.add('hide');
@@ -521,22 +587,86 @@ function startGame(){
 function endGame(){
   S.scene='result';
   document.getElementById('stopbtn').style.display='none';
-  const c=S.counts, total=c.just+c.ok+c.miss+c.trap;
+  const c=S.counts, total=c.just+c.ok+c.miss+c.trap+c.slip;
   const rate=total?c.just/total:0;
   const rank= S.perfect?'👑 パーフェクト！！！'
     :rate>=0.85?'かんぺき！！':rate>=0.6?'すごい！':rate>=0.35?'まあまあ':'れんしゅうだ！';
+  const trapLbl=P.stage==='dice'?'　おてつき ':'　ダ ';
   document.getElementById('result').innerHTML=
     '<b>'+rank+'</b><br>'+
     '<span class="cnt">ジャスト '+c.just+'　OK '+c.ok+'　ミス '+c.miss+
-    (c.trap?'　ダ '+c.trap:'')+(c.spam?'　👀おみとおし '+c.spam:'')+'　さいだいコンボ '+S.best+'</span>';
+    (c.fast?'　<span style="color:#7FD7EA">ソッコー '+c.fast+'</span>':'')+
+    (c.slip?'　ズレ '+c.slip:'')+
+    (c.trap?trapLbl+c.trap:'')+(c.spam?'　👀おみとおし '+c.spam:'')+'　さいだいコンボ '+S.best+'</span>';
   document.getElementById('go').textContent='もういちど！';
   document.getElementById('screen').classList.remove('hide');
 }
 
 /* ---------- 判定（すべてaudio時刻で） ---------- */
+/* サイコロビート: 押した「拍」がそのまま答え（左=拍0,2,4,6／右=拍1,3,5,7）。
+   拍の帰属は「いま/さっき見た光」寄り（floor）——遅れた指はさっき見た光のもの。
+   先読みだけはジャスト窓ぶん次の拍を取れる（「左で押したのに右と記録」の誤認を根絶）。
+   OK帯を超えた遅れ=ズレ。回答にならずラウンド続行（ミスは記録するが没収しない） */
+function diceJudge(tapT){
+  const win=P.window/1000, okb=win*OKX;
+  let mi=0;while(mi<S.measures-1&&tapT>=S.mStart[mi+1])mi++;
+  let m=S.chart[mi];
+  if(!m||m.kind==='countin'||m.kind==='break'){poke(0.05);tone(nowA(),260,.05,.06);return 'free';}
+  if(m.kind==='spin'){
+    // 窓のあたまへの先読み: 次小節がgoならジャスト窓ぶんだけ食い込みを許す
+    const nx=S.chart[mi+1];
+    if(nx&&nx.kind==='go'&&S.mStart[mi+1]-tapT<=win){m=nx;mi++;}
+    else{poke(0.05);tone(nowA(),260,.05,.06);
+      feedback('free','<span class="spam">まだ！ ひかってから…！</span>');return 'early';}
+  }
+  if(m.kind!=='go'){poke(0.04);return 'free';}
+  if(m.resolved){poke(0.04);tone(nowA(),260,.05,.06);return 'free';}
+  const t0=m.w0, spb=m.spbW;
+  if(tapT>t0+DICE_WIN*spb+win){poke(0.04);return 'free';}
+  const frac=(tapT-t0)/spb;
+  let k=Math.floor(frac);
+  if(k+1<=DICE_WIN-1&&(k+1-frac)*spb<=win)k=k+1;
+  if(k<0){poke(0.05);
+    feedback('free','<span class="spam">まだ！ ひかってから…！</span>');return 'early';}
+  if(k>DICE_WIN-1)k=DICE_WIN-1;
+  const off=Math.abs(tapT-(t0+k*spb));
+  const chosen=k%2;
+  const eq=m.hand.join('+')+'='+m.sum;
+  if(off>okb){ // 滅の谷間＝答えたことにならない（同じ札の次の光でやりなおせる）
+    if(!m.hint)S.counts.slip++;
+    S.combo=0;thud(nowA());S.jito=600;S.settle=300;
+    feedback('miss','<span class="miss">ズレた…！ ひかった しゅんかんに もういちど！</span>');
+    return 'slip';
+  }
+  m.resolved=true;m.pick=chosen;m.pickAt=nowA();
+  if(chosen===m.correct){
+    const res=off<=win?'just':'ok';
+    const fast=k<=1; // ソッコー: 窓の1周目＝その札の最初のひかりで答えた（解けていた証明）
+    const ms=Math.round((tapT-(t0+k*spb))*1000);
+    if(res==='just'){S.counts.just++;S.combo++;S.best=Math.max(S.best,S.combo);
+      impact(1.4);S.star=500;dingJ(nowA());burst(0,0,P.particles);bloom(0.09);}
+    else{S.counts.ok++;S.combo++;S.best=Math.max(S.best,S.combo);
+      impact(0.5);dingO(nowA());poke(0.07);}
+    if(fast){S.counts.fast++;m.fast=true;sokkoSpark(nowA()+0.05);}
+    // カウントアップ儀式: サイコロが左から順に跳ねて 3…8…12！（暗算のなぞり直し）
+    m.cere=1;
+    S.cere={hand:m.hand,sum:m.sum,start:nowA()+0.15,step:0.30,res,done:false};
+    for(let i=0;i<DICE_ND;i++)tone(S.cere.start+i*S.cere.step,523*Math.pow(2,i/6),.12,.15);
+    sumChime(S.cere.start+DICE_ND*S.cere.step);
+    feedback(res,(fast?'<span style="color:#7FD7EA">ソッコー！</span> ':'')
+      +'<span class="'+res+'">'+(res==='just'?'ジャスト!':'OK')+'</span> '+(ms>=0?'+':'')+ms+'ms');
+    S.fbUntil=nowA()+2.0; S.settle=300;
+    return res;
+  }
+  S.counts.trap++;S.combo=0;S.jito=900;S.settle=340; // 誤答: れんしゅうでも本番と同じ扱い
+  thud(nowA());S.vsy+=3;
+  feedback('miss','<span class="miss">あっ、そっちじゃ ない…！（'+eq+'）</span>');
+  return 'trap';
+}
 function judgeAt(tapT){ // tapT: audio時刻（補正済みで渡す）
   if(S.scene!=='play')return null;
   S.counts.taps++;
+  if(P.stage==='dice')return diceJudge(tapT);
   const win=P.window/1000, okz=win*OKX;
   // 近傍の未ヒット期待を探す（現在±1小節）
   let bestHit=null,bestOff=1e9,bestHitM=-1;
@@ -721,12 +851,27 @@ function update(dt){
         }
       }
     }
+    // サイコロビート: 窓の時間切れ＝にげられた（れんしゅうは静かに。挑まなかったことは罰しない）
+    if(P.stage==='dice'){
+      for(let k=Math.max(0,mi-2);k<=Math.min(S.measures-1,mi);k++){
+        const dm=S.chart[k];
+        if(dm.kind!=='go'||dm.resolved||S.mStart[k]!==dm.w0)continue; // 共有ラウンドは初出だけ見る
+        if(nowA()>dm.w0+DICE_WIN*dm.spbW){
+          dm.resolved=true;dm.pick=-1;
+          if(!dm.hint){S.counts.miss++;S.combo=0;
+            feedback('miss','<span class="miss">にげられた…！（'+dm.hand.join('+')+'='+dm.sum+'）</span>');
+            thud(nowA());S.vsy+=3;}
+        }
+      }
+      if(S.cere&&!S.cere.done&&nowA()>=S.cere.start+DICE_ND*S.cere.step){ // 合計チャイムと同時にはじける
+        S.cere.done=true;burst(0,-blobR()*1.4,S.cere.res==='just'?26:14);}
+    }
     const li=S.measures-1;
     if(!S.outro&&nowA()>=S.mStart[li]+6*S.mSpb[li]){
       evalMeasureEnd(li); // measureNowは最終小節でクランプされ「小節替わり」が来ない
       // 余韻: 即リザルトにせず、ファンファーレ＋拍手＋褒めを先に（がんばりの受け止め）。
       // 祝いの規模は正解率で変わる——高いほど盛大に。ただし低くても必ずねぎらう
-      const tot=S.counts.just+S.counts.ok+S.counts.miss+S.counts.trap;
+      const tot=S.counts.just+S.counts.ok+S.counts.miss+S.counts.trap+S.counts.slip;
       const rate=tot?S.counts.just/tot:0;
       // ほんとにホントのパーフェクト: 全判定がジャスト（OKすら無い）＋おみとおしゼロ。
       // やりこみ・粘りたい人のための最上段（tier3）
@@ -813,8 +958,12 @@ function update(dt){
       else if(m.kind==='odai'){el.textContent='👀 おだい！';el.className='call';}
       else if(m.kind==='countin'){
         const n=Math.max(1,Math.min(4,Math.floor(beatInMeasure(mi))+1));
-        if(P.stage==='quiz'){el.textContent='🥁 いくよ… '+n;el.className='call';}
+        if(P.stage!=='beat'){el.textContent='🥁 いくよ… '+n;el.className='call';}
         else{el.textContent='🥁 カウント '+n+'…（まねなくて OK）';el.className='';}}
+      else if(m.kind==='spin'){
+        el.textContent=beatInMeasure(mi)<3?'🎲 たして…':'🎲 ごうけいは どっち？';el.className='call';}
+      else if(m.kind==='go'){
+        el.textContent=!m.resolved?'🔥 ひかったら おして！':'🎲 つぎ いくよ…';el.className='resp';}
       else if(m.kind==='call'){
         if(m.section==='hon') el.textContent='💪 ほんばん！ きいて…';
         else el.textContent=(m.set&&m.set.gaman
@@ -1046,6 +1195,124 @@ function draw(){
         ctx.globalAlpha=1;ctx.textBaseline='alphabetic';
       }
     }
+    // サイコロビート: サイコロは上段（みての高さ）・2たくはその下（こたえての高さ）。
+    // まと（まんなかの子）がボタン——ひかった瞬間に押す＝押す拍が答え
+    if(P.stage==='dice'){
+      const mNow=S.chart[Math.min(mi,S.measures-1)];
+      const binNow=beatInMeasure(Math.min(mi,S.measures-1));
+      let rm=null,phase='idle';
+      if(mNow){
+        if(mNow.kind==='spin'){rm=mNow;phase='spin';}
+        else if(mNow.kind==='go'){rm=mNow;phase='go';}
+        else if(S.chart[mi+1]&&S.chart[mi+1].kind==='spin'){rm=S.chart[mi+1];phase='pre';}
+      }
+      const FQ4='"Hiragino Maru Gothic ProN","BIZ UDPGothic","Noto Sans JP",sans-serif';
+      // 縦の間取り: サイコロ（上段）→ 足し算のことば（中段）→ 2たく（下段）→ まと。
+      // 小さい画面では r 基準が勝つので、サイコロは高めに逃がして文字の居場所を作る
+      const diceY=-Math.min(H*0.33,r*2.75), chYd=-Math.min(H*0.17,r*1.35);
+      const dw=Math.min(W*0.18,80);
+      const spbD=S.mSpb[Math.min(mi,S.measures-1)];
+      for(let b=1;b<=DICE_ND;b++){ // サイコロ3つ（spinで1拍1個着地・儀式中は順に跳ねる）
+        const x=(b-2)*(dw+12);
+        if(!rm){drawDieFrame(x,diceY,dw);continue;}
+        if(phase==='pre'){drawDie(x,diceY,dw*0.8,1+((Math.random()*6)|0),(Math.random()-0.5)*0.5,0.35);continue;}
+        if(phase==='spin'){
+          const stopped=binNow>=(b-1);
+          if(stopped){const e=Math.min(1,(binNow-(b-1))/0.14);
+            drawDie(x,diceY,dw*(0.86+0.14*e),rm.hand[b-1],0,1);}
+          else drawDie(x,diceY,dw*0.94,1+((Math.random()*6)|0),(Math.random()-0.5)*0.5,0.9);
+          continue;}
+        let dyb=0,scb=1;
+        if(rm.cere&&S.cere){const bt=(nowA()-S.cere.start)/S.cere.step-(b-1);
+          if(bt>0&&bt<1){dyb=-Math.sin(bt*Math.PI)*dw*0.28;scb=1+0.12*Math.sin(bt*Math.PI);}}
+        drawDie(x,diceY+dyb,dw*scb,rm.hand[b-1],0,1);
+      }
+      // 2たく: spin拍3でポップイン→goで1拍ごとに交互にひかる（滅の谷間は両方暗い）
+      const showCh=rm&&rm.choices&&(phase==='go'||(phase==='spin'&&binNow>=3));
+      if(showCh){
+        const goT=phase==='go'?rm.w0:S.mStart[mi+1];
+        const spbW=phase==='go'?rm.spbW:spbD;
+        const popT=goT-spbW;
+        const chw=Math.min(W*0.3,140), chh=Math.min(64,r*0.6);
+        const popE=Math.min(1,Math.max(0,(nowA()-popT)/0.18));
+        const tb=(nowA()-goT)/spbW;
+        const openW=phase==='go'&&!rm.resolved&&tb<=DICE_WIN;
+        for(let i2=0;i2<2;i2++){
+          const x=(i2-0.5)*(chw+18);
+          let lum=0.3;
+          if(openW&&tb>=-0.5){ // じぶんの拍（左=0,2,4,6／右=1,3,5,7）に近いほど明るい
+            let kk=Math.round((tb-i2)/2)*2+i2;
+            kk=Math.max(i2,Math.min(DICE_WIN-2+i2,kk));
+            lum=Math.exp(-Math.pow(Math.abs(tb-kk)/0.5,2)*2.2);
+          }
+          const hintAns=rm.hint&&i2===rm.correct; // れんしゅう: 答えの札は水色（補助輪）
+          let fill='#241d3a',border='#4a3f73',txt='#EDE7F8',al=0.3+0.7*lum,sc=popE,dy2=0;
+          if(openW)sc=popE*(1+0.10*lum);
+          if(hintAns&&!rm.resolved){fill='#1e3348';border='#7FD7EA';txt='#7FD7EA';}
+          if(!rm.resolved&&lum>0.5){border='#FFD34D';fill='#3a2f1a';txt='#FFD34D';}
+          if(rm.resolved){
+            al=1;sc=popE;
+            if(i2===rm.correct){border='#FFB84D';fill='#3a2f1a';txt='#FFD34D';} // 答え合わせ
+            else al=0.4;
+            if(rm.pick===i2&&rm.pick!==rm.correct){border='#FF7A6B';txt='#FF7A6B';al=1;
+              const e=Math.min(1,(nowA()-rm.pickAt)/0.5);
+              dy2=Math.sin((nowA()-rm.pickAt)*60)*(1-e)*4;}
+          }
+          ctx.save();ctx.globalAlpha=al;
+          ctx.translate(x+dy2,chYd);ctx.scale(sc,sc);
+          if(!rm.resolved&&lum>0.5){ctx.shadowColor='rgba(255,211,77,'+(0.8*lum).toFixed(3)+')';ctx.shadowBlur=24*lum;}
+          ctx.fillStyle=fill;
+          ctx.beginPath();ctx.roundRect(-chw/2,-chh/2,chw,chh,14);ctx.fill();
+          ctx.shadowBlur=0;
+          ctx.strokeStyle=border;ctx.lineWidth=3;ctx.stroke();
+          ctx.fillStyle=txt;
+          ctx.font='800 '+Math.round(chh*0.55)+'px '+FQ4;
+          ctx.textAlign='center';ctx.textBaseline='middle';
+          ctx.fillText(rm.choices[i2],0,1);
+          ctx.restore();
+        }
+        ctx.globalAlpha=1;ctx.textBaseline='alphabetic';
+        if(openW&&tb>=0){ // のこり時間ゲージ
+          const remain=Math.max(0,1-tb/DICE_WIN);
+          ctx.fillStyle='rgba(255,211,77,0.5)';
+          ctx.fillRect(-(chw+9),chYd+chh*0.72,(chw+9)*2*remain,4);
+        }
+        if(openW){ // まと=ボタン: 窓のあいだ金のリング（拍アタマで脈打つ）
+          const phB=((tb%1)+1)%1;
+          ctx.strokeStyle='#FFD34D';
+          ctx.lineWidth=4+2*Math.exp(-phB*6);
+          ctx.beginPath();ctx.arc(0,0,r*1.32,0,7);ctx.stroke();
+        }
+      }
+      // 足し算のことばの居場所（サイコロの下端と2たくの上端のあいだ）
+      const midY=(diceY+dw/2+(chYd-Math.min(64,r*0.6)/2))/2;
+      // れんしゅうの補助輪: spin中、とまった目の足し算を途中経過で見せる
+      if(rm&&rm.hint&&phase==='spin'&&binNow<3.6){
+        const n2=Math.min(DICE_ND,Math.floor(binNow)+1);
+        if(n2>0){
+          const parts=rm.hand.slice(0,n2), cum=parts.reduce((a,b)=>a+b,0);
+          ctx.textAlign='center';
+          ctx.fillStyle='#7FD7EA';ctx.font='700 17px '+FQ4;
+          ctx.fillText(parts.join('+')+(n2>=DICE_ND?'='+cum:'…'),0,midY+6);
+        }
+      }
+      // カウントアップ儀式（3…8…12！）——正解の暗算をゲームがなぞり直す
+      if(S.cere){
+        const age=nowA()-S.cere.start,dur=DICE_ND*S.cere.step;
+        if(age>0&&age<dur+1.1){
+          const iDone=Math.min(DICE_ND,Math.floor(age/S.cere.step)+1);
+          const parts=S.cere.hand.slice(0,iDone), cum=parts.reduce((a,b)=>a+b,0);
+          const fin=age>=dur;
+          ctx.textAlign='center';
+          ctx.fillStyle='#9d90c4';ctx.font='700 14px '+FQ4;
+          ctx.fillText(parts.join('+')+(fin?'=':''),0,midY-8);
+          const pop2=fin?1+0.25*Math.exp(-(age-dur)*5):1;
+          ctx.fillStyle=fin?'#FFD34D':'#EDE7F8';
+          ctx.font='800 '+Math.round(26*pop2)+'px '+FQ4;
+          ctx.fillText(cum+(fin?'！':''),0,midY+18);
+        }
+      }
+    }
   }
   // 祝いの放射リング（かんぺき以上・接近リングの逆＝解き放つ動き。体のうしろ。
   // パーフェクトは本数も速さも増して白金がまざる）
@@ -1178,6 +1445,24 @@ function draw(){
 function starEye(x,y,r){ctx.save();ctx.translate(x,y);ctx.fillStyle='#FF6F61';
   ctx.beginPath();for(let i=0;i<10;i++){const a=Math.PI*i/5-Math.PI/2,rr=i%2?r*.45:r;
     ctx.lineTo(Math.cos(a)*rr,Math.sin(a)*rr);}ctx.closePath();ctx.fill();ctx.restore();}
+/* サイコロの絵（サイコロビート専用） */
+const DPIPS={1:[[0,0]],2:[[-1,-1],[1,1]],3:[[-1,-1],[0,0],[1,1]],
+  4:[[-1,-1],[1,-1],[-1,1],[1,1]],5:[[-1,-1],[1,-1],[0,0],[-1,1],[1,1]],
+  6:[[-1,-1],[1,-1],[-1,0],[1,0],[-1,1],[1,1]]};
+function drawDie(x,y,s,face,rot,al){
+  ctx.save();ctx.translate(x,y);if(rot)ctx.rotate(rot);
+  ctx.globalAlpha=al;
+  ctx.fillStyle='#EDE7F8';ctx.strokeStyle='#b9ace0';ctx.lineWidth=2.5;
+  ctx.beginPath();ctx.roundRect(-s/2,-s/2,s,s,s*0.18);ctx.fill();ctx.stroke();
+  ctx.fillStyle='#3a2f5c';
+  const g=s*0.26,pr2=s*0.075;
+  for(const pp of DPIPS[face]||[]){ctx.beginPath();ctx.arc(pp[0]*g,pp[1]*g,pr2,0,7);ctx.fill();}
+  ctx.restore();ctx.globalAlpha=1;
+}
+function drawDieFrame(x,y,s){
+  ctx.strokeStyle='#3d3260';ctx.lineWidth=2;ctx.setLineDash([5,5]);
+  ctx.beginPath();ctx.roundRect(x-s/2,y-s/2,s,s,s*0.18);ctx.stroke();ctx.setLineDash([]);
+}
 
 /* ---------- UI配線 ---------- */
 document.querySelectorAll('.bpms button[data-bpm]').forEach(b=>{
@@ -1185,8 +1470,8 @@ document.querySelectorAll('.bpms button[data-bpm]').forEach(b=>{
     document.querySelectorAll('.bpms button[data-bpm]').forEach(x=>x.classList.remove('on'));
     b.classList.add('on');});
 });
-function syncStageUI(){ // 看板の顔: ビート=🥁 ビーム=🛸（名前が似てるぶん、絵で見分ける）
-  const em=P.stage==='quiz'?'🛸':'🥁';
+function syncStageUI(){ // 看板の顔: ビート=🥁 ビーム=🛸 サイコロ=🎲（名前が似てるぶん、絵で見分ける）
+  const em=P.stage==='quiz'?'🛸':P.stage==='dice'?'🎲':'🥁';
   document.getElementById('stagemoji').textContent=em;
   document.getElementById('brandmoji').textContent=em;
   document.querySelectorAll('.stages button').forEach(x=>
