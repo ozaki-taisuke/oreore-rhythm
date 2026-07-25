@@ -10,6 +10,16 @@
 <meta property="og:url" content="https://ozaki-taisuke.github.io/oreore-rhythm/">
 <meta property="og:image" content="https://ozaki-taisuke.github.io/oreore-rhythm/ogp.png?h=cdefe9b3">
 <meta name="twitter:card" content="summary_large_image">
+<!-- アイコン: タブ用（favicon）は小サイズで潰れない太描き版、ホーム画面用（apple-touch-icon
+     ・manifest）は余白のある版。どちらも「まと＋接近リング」で絵は同じ。
+     スマホのホーム画面に置くと実質アプリのアイコンになるため、背景は必ずベタで塗る
+     （iOSは透明を黒で合成する）。manifestのdisplayは browser のまま＝挙動は変えない -->
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#151222">
+<meta name="apple-mobile-web-app-title" content="オレオレリズム">
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
   html,body{height:100%;overflow:hidden;background:#151222;color:#EDE7F8;
@@ -142,7 +152,7 @@
   </div>
   <div id="result"></div>
   <button class="go" id="go">はじめる！</button>
-  <div class="ver">オレオレリズム v0.3.3（うちこみビート ＋ うちこめビーム ＋ サイコロプラス）</div>
+  <div class="ver">オレオレリズム v0.3.4（うちこみビート ＋ うちこめビーム ＋ サイコロプラス）</div>
 </div>
 
 <script>

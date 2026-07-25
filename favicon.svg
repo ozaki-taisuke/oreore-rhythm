@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- タブ用（16〜32px）の小サイズ変種。図はicon.svgと同じ「まと＋接近リング」だが、
+       小さくても潰れないように まとを大きく・リングを太く・顔を濃く描く。
+       ホーム画面アイコン（apple-touch-icon等）は余白の要る icon.svg を使う -->
+  <defs>
+    <radialGradient id="bodyS" cx="38%" cy="34%" r="72%">
+      <stop offset="0" stop-color="#C9B6F5"/>
+      <stop offset="1" stop-color="#8E6FE0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="#151222"/>
+  <circle cx="256" cy="256" r="228" fill="none" stroke="#FFD34D" stroke-width="32"/>
+  <circle cx="256" cy="256" r="186" fill="url(#bodyS)"/>
+  <ellipse cx="187.8" cy="237.4" rx="24.8" ry="37.2" fill="#241d3a"/>
+  <ellipse cx="324.2" cy="237.4" rx="24.8" ry="37.2" fill="#241d3a"/>
+  <path d="M187.8 318 Q256 373.8 324.2 318" fill="none" stroke="#241d3a"
+        stroke-width="26" stroke-linecap="round"/>
+</svg>

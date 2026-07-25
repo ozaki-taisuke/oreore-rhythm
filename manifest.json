@@ -1,0 +1,15 @@
+{
+  "name": "オレオレリズム",
+  "short_name": "オレオレリズム",
+  "description": "きいて→こたえて のコール&レスポンス リズムゲーム。リズム×クイズ×たしざんの3ステージ。",
+  "start_url": "./",
+  "scope": "./",
+  "display": "browser",
+  "theme_color": "#151222",
+  "background_color": "#151222",
+  "lang": "ja",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
