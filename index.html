@@ -142,7 +142,7 @@
   </div>
   <div id="result"></div>
   <button class="go" id="go">はじめる！</button>
-  <div class="ver">オレオレリズム v0.3.0（うちこみビート ＋ うちこめビーム ＋ サイコロビート）</div>
+  <div class="ver">オレオレリズム v0.3.1（うちこみビート ＋ うちこめビーム ＋ サイコロビート）</div>
 </div>
 
 <script>
@@ -269,6 +269,8 @@ function resize(){
 window.addEventListener('resize',resize); resize();
 function checkResize(){ if(Math.abs(cv.clientWidth-W)>1||Math.abs(cv.clientHeight-H)>1) resize(); }
 const CY=()=>H*0.46, blobR=()=>Math.min(110,Math.min(W,H)*0.17);
+// サイコロビートだけ、まとを下へ（サイコロ・2たく・とけい弧と役割の位置が被らないように）
+const CHAR_DY=()=>P.stage==='dice'?Math.min(H*0.07,blobR()*0.55):0;
 const lerp=(a,b,t)=>a+(b-a)*t;
 
 /* ---------- audio: 合成音＋先読みスケジューラ ---------- */
@@ -316,6 +318,7 @@ const guideL=t=>tone(t,523,.05,.07); // ひかる札のガイド音: 左=低
 const guideR=t=>tone(t,659,.05,.07); //                     右=高（目をつぶっても交互がわかる）
 function sokkoSpark(t){tone(t,1568,.07,.12);tone(t+0.07,2093,.1,.12);} // ソッコーのきらめき
 function sumChime(t){tone(t,1046,.3,.2);tone(t,784,.3,.12);tone(t,1318,.35,.09);} // 合計チャイム
+function bubu(t){tone(t,196,.15,.2,'square',-25);tone(t+0.17,147,.3,.2,'square',-18);} // ぶぶー（おてつきの答え合わせ）
 function shush(t){ // がまんの予告音（やわらかい「フゥー↓」。破裂音NG・驚かせない）
   const a=ac(),len=0.38;
   const o=a.createOscillator(),g=a.createGain();
@@ -660,7 +663,13 @@ function diceJudge(tapT){
   }
   S.counts.trap++;S.combo=0;S.jito=900;S.settle=340; // 誤答: れんしゅうでも本番と同じ扱い
   thud(nowA());S.vsy+=3;
-  feedback('miss','<span class="miss">あっ、そっちじゃ ない…！（'+eq+'）</span>');
+  // おてつきでも足し上げて「ほんとうの答え」をなぞり直す。最後は金でなく赤＋ぶぶー
+  m.cere=1;
+  S.cere={hand:m.hand,sum:m.sum,start:nowA()+0.25,step:0.30,res:'trap',done:false};
+  for(let i=0;i<DICE_ND;i++)tone(S.cere.start+i*S.cere.step,523*Math.pow(2,i/6),.12,.13);
+  bubu(S.cere.start+DICE_ND*S.cere.step);
+  feedback('miss','<span class="miss">あっ、そっちじゃ ない…！</span>');
+  S.fbUntil=nowA()+2.0;
   return 'trap';
 }
 function judgeAt(tapT){ // tapT: audio時刻（補正済みで渡す）
@@ -743,7 +752,7 @@ function judgeAt(tapT){ // tapT: audio時刻（補正済みで渡す）
 }
 window.__R.judgeAt=(t)=>judgeAt(t);
 
-function inBlob(x,y){const r=blobR()*1.7;return x*x+y*y<r*r;}
+function inBlob(x,y){const r=blobR()*1.7,yy=y-CHAR_DY();return x*x+yy*yy<r*r;}
 function inPad(rawX,rawY){
   if(P.padSide==='right')return rawX>W*0.66;
   if(P.padSide==='left') return rawX<W*0.34;
@@ -863,8 +872,11 @@ function update(dt){
             thud(nowA());S.vsy+=3;}
         }
       }
-      if(S.cere&&!S.cere.done&&nowA()>=S.cere.start+DICE_ND*S.cere.step){ // 合計チャイムと同時にはじける
-        S.cere.done=true;burst(0,-blobR()*1.4,S.cere.res==='just'?26:14);}
+      if(S.cere&&!S.cere.done&&nowA()>=S.cere.start+DICE_ND*S.cere.step){
+        S.cere.done=true;
+        if(S.cere.res==='trap'){S.shake=Math.max(S.shake,6);S.jito=800;} // ぶぶーと同時にがっくり
+        else burst(0,-blobR()*1.4,S.cere.res==='just'?26:14);            // 合計チャイムと同時にはじける
+      }
     }
     const li=S.measures-1;
     if(!S.outro&&nowA()>=S.mStart[li]+6*S.mSpb[li]){
@@ -1272,16 +1284,17 @@ function draw(){
           ctx.restore();
         }
         ctx.globalAlpha=1;ctx.textBaseline='alphabetic';
-        if(openW&&tb>=0){ // のこり時間ゲージ
-          const remain=Math.max(0,1-tb/DICE_WIN);
-          ctx.fillStyle='rgba(255,211,77,0.5)';
-          ctx.fillRect(-(chw+9),chYd+chh*0.72,(chw+9)*2*remain,4);
-        }
-        if(openW){ // まと=ボタン: 窓のあいだ金のリング（拍アタマで脈打つ）
+        // まと=とけい: のこり時間は、まとの周りで欠けていく金の弧で語る
+        // （囲いリングとゲージ棒は廃止——1要素1役割、他の要素と位置を被らせない）
+        if(openW&&tb>=0){
+          const rem=Math.max(0,1-tb/DICE_WIN);
           const phB=((tb%1)+1)%1;
           ctx.strokeStyle='#FFD34D';
           ctx.lineWidth=4+2*Math.exp(-phB*6);
-          ctx.beginPath();ctx.arc(0,0,r*1.32,0,7);ctx.stroke();
+          ctx.lineCap='round';
+          ctx.beginPath();
+          ctx.arc(0,CHAR_DY(),r*1.26,-Math.PI/2,-Math.PI/2+Math.PI*2*rem);
+          ctx.stroke();
         }
       }
       // 足し算のことばの居場所（サイコロの下端と2たくの上端のあいだ）
@@ -1307,7 +1320,8 @@ function draw(){
           ctx.fillStyle='#9d90c4';ctx.font='700 14px '+FQ4;
           ctx.fillText(parts.join('+')+(fin?'=':''),0,midY-8);
           const pop2=fin?1+0.25*Math.exp(-(age-dur)*5):1;
-          ctx.fillStyle=fin?'#FFD34D':'#EDE7F8';
+          // 正解=金の「12！」／おてつき=赤の「12！」（ほんとうの答えを突きつける）
+          ctx.fillStyle=fin?(S.cere.res==='trap'?'#FF7A6B':'#FFD34D'):'#EDE7F8';
           ctx.font='800 '+Math.round(26*pop2)+'px '+FQ4;
           ctx.fillText(cum+(fin?'！':''),0,midY+18);
         }
@@ -1324,12 +1338,13 @@ function draw(){
       ctx.globalAlpha=(1-ph)*0.4;
       ctx.strokeStyle=(S.outroTier===3&&j%2)?'#FFF6D8':'#FFD34D';
       ctx.lineWidth=2+5*(1-ph);
-      ctx.beginPath();ctx.arc(0,0,r+(rMx-r)*ph,0,7);ctx.stroke();
+      ctx.beginPath();ctx.arc(0,CHAR_DY(),r+(rMx-r)*ph,0,7);ctx.stroke();
     }
     ctx.globalAlpha=1;
   }
   // 体
   ctx.save();
+  if(CHAR_DY())ctx.translate(0,CHAR_DY());
   const be=1+beatPulse();
   ctx.scale(S.sx*be,S.sy*be);
   const grad=ctx.createRadialGradient(-r*.3,-r*.4,r*.2,0,0,r*1.1);
