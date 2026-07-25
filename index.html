@@ -7,8 +7,15 @@
 <meta property="og:title" content="オレオレリズム 🥁">
 <meta property="og:description" content="きいて→こたえて のコール&レスポンス リズムゲーム。リズム×クイズ×たしざんの3ステージ。ブラウザでひらくだけ・つうしんなし・むりょう。">
 <meta property="og:type" content="website">
-<meta property="og:url" content="https://ozaki-taisuke.github.io/oreore-rhythm/">
-<meta property="og:image" content="https://ozaki-taisuke.github.io/oreore-rhythm/ogp.png?h=cdefe9b3">
+<!-- og:url は置かない: SNSのカードは「貼られたURL」単位でキャッシュされる。
+     カードを更新したい時は ?v=4 のような別URLを貼って取り直させるが、og:urlがあると
+     そこへ正規化されて古いカードが再び出ることがある（2026-07-25に実害） -->
+<!-- og:image はファイル名にハッシュを埋める（make_release.shが差し替える）。
+     クエリ(?h=)だと画像プロキシがパス単位で古い実体を持ち続けることがある -->
+<meta property="og:image" content="https://ozaki-taisuke.github.io/oreore-rhythm/ogp-cdefe9b3.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="オレオレリズム — うちこみビート／うちこめビーム／サイコロプラスの3ステージ">
 <meta name="twitter:card" content="summary_large_image">
 <!-- アイコン: タブ用（favicon）は小サイズで潰れない太描き版、ホーム画面用（apple-touch-icon
      ・manifest）は余白のある版。どちらも「まと＋接近リング」で絵は同じ。
@@ -152,7 +159,7 @@
   </div>
   <div id="result"></div>
   <button class="go" id="go">はじめる！</button>
-  <div class="ver">オレオレリズム v0.3.4（うちこみビート ＋ うちこめビーム ＋ サイコロプラス）</div>
+  <div class="ver">オレオレリズム v0.3.5（うちこみビート ＋ うちこめビーム ＋ サイコロプラス）</div>
 </div>
 
 <script>
