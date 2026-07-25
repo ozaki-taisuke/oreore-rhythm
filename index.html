@@ -142,7 +142,7 @@
   </div>
   <div id="result"></div>
   <button class="go" id="go">はじめる！</button>
-  <div class="ver">オレオレリズム v0.3.1（うちこみビート ＋ うちこめビーム ＋ サイコロビート）</div>
+  <div class="ver">オレオレリズム v0.3.2（うちこみビート ＋ うちこめビーム ＋ サイコロビート）</div>
 </div>
 
 <script>
@@ -834,6 +834,9 @@ function update(dt){
       if(S.curMeasure>=0)evalMeasureEnd(S.curMeasure);
       S.extraTaps=0; S.curMeasure=mi;
       if(S.chart[mi]&&S.chart[mi].kind==='break')S.relief=1100; // 区切りはにっこり（ほっと目）
+      // サイコロビート: 新ラウンドのspinが始まったら前の儀式は畳む
+      // （れんしゅうの補助輪の式と、前ラウンドの儀式の式を同じ場所に重ねない）
+      if(P.stage==='dice'&&S.chart[mi]&&S.chart[mi].kind==='spin')S.cere=null;
     }
     // 「しーっ」の顔: がまんのコール中（＋わなヒント時はレスポンス中も）に本人が演じる
     {
@@ -1208,8 +1211,10 @@ function draw(){
       }
     }
     // サイコロビート: サイコロは上段（みての高さ）・2たくはその下（こたえての高さ）。
-    // まと（まんなかの子）がボタン——ひかった瞬間に押す＝押す拍が答え
-    if(P.stage==='dice'){
+    // まと（まんなかの子）がボタン——ひかった瞬間に押す＝押す拍が答え。
+    // 曲おわり（outro）は盤面を引っ込めて、でっかい褒めに舞台を明け渡す
+    // （白いサイコロの上に白金の褒め文字が乗ると読めない）
+    if(P.stage==='dice'&&!S.outro){
       const mNow=S.chart[Math.min(mi,S.measures-1)];
       const binNow=beatInMeasure(Math.min(mi,S.measures-1));
       let rm=null,phase='idle';
